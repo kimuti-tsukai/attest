@@ -1,0 +1,18 @@
+[package]
+name = "attest"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0.86"
+clap = { version = "4.5.4", features = ["derive"] }
+dirs = "5.0.1"
+regex = "1.10.4"
+reqwest = { version = "0.12.3", features = ["json","cookies"] }
+rustc-hash = "1.1.0"
+scraper = "0.19.0"
+serde = { version = "1.0.198", features = ["derive"] }
+serde_json = "1.0.116"
+tokio = { version = "1.37.0", features = ["full"] }
+toml = "0.8.12"
