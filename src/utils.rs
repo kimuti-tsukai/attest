@@ -101,3 +101,7 @@ pub fn file_read_to_string(path: &str) -> String {
 
     f
 }
+
+pub fn link_from_copy() -> String {
+    file_read_to_string("./.attest/url.txt")
+}
