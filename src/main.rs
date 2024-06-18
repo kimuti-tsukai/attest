@@ -1,4 +1,5 @@
 use anyhow::Result;
+use reqwest::Client;
 use std::collections::HashMap;
 use std::env::current_dir;
 use std::fs::File;
@@ -7,7 +8,7 @@ use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::num::IntErrorKind;
 use std::path::{Path, PathBuf};
-use std::process::{Command as StdCommand, Output, Stdio};
+use std::process::{Child, Command as StdCommand, Output, Stdio};
 use std::time::{Duration, Instant};
 
 mod subcommands;
@@ -125,16 +126,20 @@ Output:
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Arg::parse();
+    let args: Arg = Arg::parse();
 
     match args {
-        Arg::Test { url, example_num } => { run(url, example_num).await?; },
-        Arg::Submit { url, lang } => { submit(url, lang).await; },
+        Arg::Test { url, example_num } => {
+            run(url, example_num).await?;
+        }
+        Arg::Submit { url, lang } => {
+            submit(url, lang).await;
+        }
         Arg::Tebmit { url, lang } => {
-            let results = run(url.clone(), Vec::new()).await?;
+            let results: Option<Vec<Res>> = run(url.clone(), Vec::new()).await?;
 
             if let Some(v) = results {
-                if v.iter().all(|&a| a == Res::AC) {
+                if v.iter().all(|&a: &Res| a == Res::AC) {
                     submit(url, lang).await;
                 }
             }
@@ -170,20 +175,20 @@ async fn main() -> Result<()> {
 
 // Function to run
 async fn run(url: Option<String>, example_num: Vec<usize>) -> Result<Option<Vec<Res>>> {
-    let (examples, time_limit);
+    let (examples, time_limit): (Vec<IO>, u128);
 
     if url.is_none() || is_same_link(&url.clone().unwrap()) {
         examples = examples_from_cache();
 
         time_limit = time_limit_from_cache();
     } else {
-        let url = url.unwrap();
+        let url: String = url.unwrap();
 
-        let c = make_client();
+        let c: Client = make_client();
 
-        let text = request(&c, &url).await?;
+        let text: String = request(&c, &url).await?;
 
-        let html = to_html(text);
+        let html: Html = to_html(text);
 
         examples = assort(&select_samples(&html));
 
@@ -191,9 +196,9 @@ async fn run(url: Option<String>, example_num: Vec<usize>) -> Result<Option<Vec<
 
         save_cache(&url, time_limit, &examples);
     }
-    let setting_toml = items_toml("./test.toml");
+    let setting_toml: Map<String, Value> = items_toml("./test.toml");
 
-    let results = test(&examples, &setting_toml, time_limit, example_num).await;
+    let results: Option<Vec<Res>> = test(&examples, &setting_toml, time_limit, example_num).await;
 
     Ok(results)
 }
@@ -209,35 +214,35 @@ fn link_from_copy() -> String {
 
 // Get examples from cache if the link is same
 fn examples_from_cache() -> Vec<IO> {
-    let text = file_read_to_string("./.attest/examples.json");
+    let text: String = file_read_to_string("./.attest/examples.json");
 
     serde_json::from_str(&text).unwrap()
 }
 
 // Get time limit from cache if the link is same
 fn time_limit_from_cache() -> u128 {
-    let time = file_read_to_string("./.attest/time_limit.txt");
+    let time: String = file_read_to_string("./.attest/time_limit.txt");
 
     time.parse().unwrap()
 }
 
 // Save cache if the link is different
 fn save_cache(url: &str, time_limit: u128, examples: &Vec<IO>) {
-    let mut l = File::create("./.attest/url.txt").expect(CREATE_ERR);
+    let mut l: File = File::create("./.attest/url.txt").expect(CREATE_ERR);
     writeln!(&mut l, "{}", url).expect(WRITE_ERR);
 
-    let mut t = File::create("./.attest/time_limit.txt").expect(CREATE_ERR);
+    let mut t: File = File::create("./.attest/time_limit.txt").expect(CREATE_ERR);
     writeln!(&mut t, "{}", time_limit).expect(WRITE_ERR);
 
-    let mut e = File::create("./.attest/examples.json").expect(CREATE_ERR);
+    let mut e: File = File::create("./.attest/examples.json").expect(CREATE_ERR);
     writeln!(&mut e, "{}", serde_json::to_string(examples).unwrap()).expect(WRITE_ERR);
 }
 
 // Select examples from Html
 fn select_samples(html: &Html) -> Vec<String> {
-    let selector = Selector::parse(r#"span[class="lang-ja"] h3 + pre"#).unwrap();
+    let selector: Selector = Selector::parse(r#"span[class="lang-ja"] h3 + pre"#).unwrap();
 
-    let mut samples = Vec::new();
+    let mut samples: Vec<String> = Vec::new();
 
     for i in html.select(&selector) {
         let v: Vec<&str> = i.text().collect();
@@ -264,15 +269,15 @@ impl IO {
 // Packing inputs and outputs to `IO`
 fn assort(v: &[String]) -> Vec<IO> {
     v.chunks(2)
-        .map(|l| IO::new(l[0].clone(), l[1].clone()))
+        .map(|l: &[String]| IO::new(l[0].clone(), l[1].clone()))
         .collect()
 }
 
 // Get time limit
 fn get_time_limit(html: &Html) -> u128 {
-    let selector = Selector::parse(r#"div[class="col-sm-12"] > p"#).unwrap();
+    let selector: Selector = Selector::parse(r#"div[class="col-sm-12"] > p"#).unwrap();
 
-    let t = html
+    let t: &str = html
         .select(&selector)
         .next()
         .unwrap()
@@ -280,8 +285,8 @@ fn get_time_limit(html: &Html) -> u128 {
         .next()
         .unwrap();
 
-    let re1 = Regex::new("Time Limit: (.+) sec").unwrap();
-    let re2 = Regex::new("Time Limit: (.+) msec").unwrap();
+    let re1: Regex = Regex::new("Time Limit: (.+) sec").unwrap();
+    let re2: Regex = Regex::new("Time Limit: (.+) msec").unwrap();
 
     if let Some(s) = re1.captures(t) {
         (s.get(1).unwrap().as_str().parse::<f64>().unwrap() * 1000.) as u128
@@ -298,7 +303,7 @@ fn get_time_limit(html: &Html) -> u128 {
 
 // Check if the code is same
 fn is_same_code(setting_toml: &Map<String, Value>) -> Option<bool> {
-    let file_path = setting_toml
+    let file_path: &str = setting_toml
         .get("file_path")?
         .as_str()
         .expect(r#"the "file_path" value must be string"#);
@@ -307,15 +312,15 @@ fn is_same_code(setting_toml: &Map<String, Value>) -> Option<bool> {
         return None;
     }
 
-    let now = file_read_to_string(file_path);
+    let now: String = file_read_to_string(file_path);
 
-    let mut now_hasher = FxHasher::default();
+    let mut now_hasher: FxHasher = FxHasher::default();
 
     now.hash(&mut now_hasher);
 
-    let now_hash = now_hasher.finish();
+    let now_hash: u64 = now_hasher.finish();
 
-    let before = file_read_to_string("./.attest/before.txt");
+    let before: String = file_read_to_string("./.attest/before.txt");
 
     let before_hash: Option<u64> = match before.parse() {
         Ok(x) => Some(x),
@@ -328,19 +333,19 @@ fn is_same_code(setting_toml: &Map<String, Value>) -> Option<bool> {
     if Some(now_hash) == before_hash {
         Some(true)
     } else {
-        let mut f = File::create("./.attest/before.txt").expect(CREATE_ERR);
+        let mut f: File = File::create("./.attest/before.txt").expect(CREATE_ERR);
         write!(&mut f, "{}", now_hash).expect(WRITE_ERR);
         Some(false)
     }
 }
 
 fn is_same_setting(setting_toml: &Map<String, Value>) -> Result<bool> {
-    let before_settiing = items_toml("./.attest/cache.toml");
+    let before_settiing: Map<String, Value> = items_toml("./.attest/cache.toml");
 
     if setting_toml == &before_settiing {
         Ok(true)
     } else {
-        let mut f = File::create("./.attest/cache.toml").expect(CREATE_ERR);
+        let mut f: File = File::create("./.attest/cache.toml").expect(CREATE_ERR);
         writeln!(&mut f, "{}", setting_toml).expect(WRITE_ERR);
 
         Ok(false)
@@ -361,15 +366,15 @@ fn build(setting_toml: &Map<String, Value>, dir: &PathBuf) -> Option<Output> {
             .as_array()
             .expect(r#""build" value must be array"#)
             .iter()
-            .map(|v| {
+            .map(|v: &Value| {
                 v.as_str()
                     .expect(r#"items of "build" value must be string"#)
             })
             .collect();
 
-        let &command = build_commands.first()?;
+        let command: &str = build_commands.first()?.to_owned();
 
-        let args = if build_commands.len() > 1 {
+        let args: &[&str] = if build_commands.len() > 1 {
             &build_commands[1..]
         } else {
             &[]
@@ -391,7 +396,7 @@ fn build_wrap(
     setting_toml: &Map<String, Value>,
     dir: &PathBuf,
     results: &mut Vec<Res>,
-) -> Result<(),()> {
+) -> Result<(), ()> {
     if let Some(output) = build(setting_toml, dir) {
         if output.status.code().unwrap() != 0 {
             println!("\x1b[33mCE\x1b[m\n");
@@ -412,7 +417,7 @@ fn get_commands(setting_toml: &Map<String, Value>) -> Vec<String> {
         .as_array()
         .expect(r#""run" value must be array"#)
         .iter()
-        .map(|v| {
+        .map(|v: &Value| {
             v.as_str()
                 .expect(r#"items of "run" value must be string"#)
                 .to_string()
@@ -427,7 +432,7 @@ fn get_test_command(setting_toml: &Map<String, Value>) -> Option<Vec<String>> {
             .as_array()
             .expect(r#""test" value must be array"#)
             .iter()
-            .map(|v| {
+            .map(|v: &Value| {
                 v.as_str()
                     .expect(r#"items of "run" value must be string"#)
                     .to_string()
@@ -442,7 +447,7 @@ fn spawn_command(
     execute_command: &str,
     args: &[String],
 ) -> impl Future<Output = Result<Output, std::io::Error>> {
-    let pipe = StdCommand::new("echo")
+    let pipe: Child = StdCommand::new("echo")
         .arg(&io.input)
         .current_dir(dir)
         .stdout(Stdio::piped())
@@ -462,7 +467,7 @@ async fn test(
     time_limit: u128,
     example_num: Vec<usize>,
 ) -> Option<Vec<Res>> {
-    let dir = current_dir().unwrap();
+    let dir: PathBuf = current_dir().unwrap();
 
     let mut results: Vec<Res> = Vec::new();
 
@@ -472,17 +477,17 @@ async fn test(
 
     let commands: Vec<String> = get_commands(setting_toml);
 
-    let execute_command = commands
+    let execute_command: &str = commands
         .first()
         .expect(r#""command" value is not satisfied"#);
 
-    let args = if commands.len() > 1 {
+    let args: &[String] = if commands.len() > 1 {
         &commands[1..]
     } else {
         &[]
     };
 
-    let test_commands = get_test_command(setting_toml);
+    let test_commands: Option<Vec<String>> = get_test_command(setting_toml);
 
     for (index, io) in examples.iter().enumerate() {
         if !example_num.is_empty() && !example_num.contains(&(index + 1)) {
@@ -493,34 +498,35 @@ async fn test(
 
         let output = spawn_command(io, &dir, execute_command, args);
 
-        let start = Instant::now();
+        let start: Instant = Instant::now();
 
-        let output = match time::timeout(Duration::from_millis(time_limit as u64), output).await {
-            Ok(v) => {
-                if let Ok(v) = v {
-                    v
-                } else {
+        let output: Output =
+            match time::timeout(Duration::from_millis(time_limit as u64), output).await {
+                Ok(v) => {
+                    if let Ok(v) = v {
+                        v
+                    } else {
+                        continue;
+                    }
+                }
+                Err(_) => {
+                    let time: u128 = start.elapsed().as_millis();
+
+                    println!("\x1b[33mTLE\x1b[m");
+
+                    println!();
+
+                    println!("input:\n{}", io.input);
+                    println!("expect output:\n{}", io.output);
+
+                    println!("time: {}", time);
+
+                    results.push(Res::TLE);
                     continue;
                 }
-            }
-            Err(_) => {
-                let time = start.elapsed().as_millis();
+            };
 
-                println!("\x1b[33mTLE\x1b[m");
-
-                println!();
-
-                println!("input:\n{}", io.input);
-                println!("expect output:\n{}", io.output);
-
-                println!("time: {}", time);
-
-                results.push(Res::TLE);
-                continue;
-            }
-        };
-
-        let time = start.elapsed().as_millis();
+        let time: u128 = start.elapsed().as_millis();
 
         check(output, time, io, &test_commands, &dir, &mut results);
     }
@@ -558,23 +564,23 @@ fn spawn_test_command(
     io: &IO,
     dir: &PathBuf,
 ) -> bool {
-    let command = test_command.as_ref().unwrap();
+    let command: &Vec<String> = test_command.as_ref().unwrap();
 
-    let pipe = StdCommand::new("echo")
+    let pipe: Child = StdCommand::new("echo")
         .args([result, &io.output])
         .current_dir(dir)
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
 
-    let test_output = StdCommand::new(command.first().unwrap())
+    let test_output: Output = StdCommand::new(command.first().unwrap())
         .args([result, &io.output])
         .stdin(Stdio::from(pipe.stdout.unwrap()))
         .current_dir(dir)
         .output()
         .unwrap();
 
-    let judge = std::str::from_utf8(&test_output.stdout).unwrap_or("");
+    let judge: &str = std::str::from_utf8(&test_output.stdout).unwrap_or("");
 
     match judge {
         "true" => true,
@@ -594,11 +600,12 @@ fn check(
     let result: &str = std::str::from_utf8(&output.stdout).unwrap_or("");
 
     if output.status.code() == Some(0) {
-        let condition = if test_command.is_some() && !test_command.as_ref().unwrap().is_empty() {
-            spawn_test_command(test_command, result, io, dir)
-        } else {
-            result == io.output
-        };
+        let condition: bool =
+            if test_command.is_some() && !test_command.as_ref().unwrap().is_empty() {
+                spawn_test_command(test_command, result, io, dir)
+            } else {
+                result == io.output
+            };
 
         if condition {
             println!("\x1b[32mAC\x1b[m");
@@ -627,23 +634,23 @@ fn check(
 
 // Submit Code
 async fn submit(url: Option<String>, lang: Option<String>) {
-    let url = match url {
+    let url: String = match url {
         Some(s) => s,
         None => link_from_copy(),
     };
 
-    let client = make_client();
+    let client: Client = make_client();
 
-    let s = request(&client, &url).await.unwrap();
+    let s: String = request(&client, &url).await.unwrap();
 
-    let html = to_html(s);
+    let html: Html = to_html(s);
 
     let mut form: HashMap<&str, &str> = HashMap::new(); // Submit form
 
-    let task_screen_name_selrctor =
+    let task_screen_name_selrctor: Selector =
         Selector::parse(r#"input[name="data.TaskScreenName"]"#).unwrap();
 
-    let task_screen_name = html
+    let task_screen_name: &str = html
         .select(&task_screen_name_selrctor)
         .next()
         .expect("You may not login")
@@ -652,9 +659,9 @@ async fn submit(url: Option<String>, lang: Option<String>) {
 
     form.insert("data.TaskScreenName", task_screen_name);
 
-    let csrf_token_selector = Selector::parse(r#"input[name="csrf_token"]"#).unwrap();
+    let csrf_token_selector: Selector = Selector::parse(r#"input[name="csrf_token"]"#).unwrap();
 
-    let csrf_token = html
+    let csrf_token: &str = html
         .select(&csrf_token_selector)
         .next()
         .unwrap()
@@ -663,22 +670,22 @@ async fn submit(url: Option<String>, lang: Option<String>) {
 
     form.insert("csrf_token", csrf_token);
 
-    let lang_code = match lang {
+    let lang_code: String = match lang {
         None => get_item_toml("./test.toml", "lang")
             .expect("You have to set lang")
             .as_str()
             .unwrap()
             .to_owned(),
         Some(lang_name) => {
-            let text = request(&client, &url).await.unwrap();
+            let text: String = request(&client, &url).await.unwrap();
 
-            let html = to_html(text);
+            let html: Html = to_html(text);
 
-            let langs = lang_select(&html);
+            let langs: Vec<(String, String)> = lang_select(&html);
 
-            let lang_code = &langs
+            let lang_code: &str = &langs
                 .iter()
-                .find(|&v| v.0 == lang_name)
+                .find(|&v: &&(String, String)| v.0 == lang_name)
                 .expect("The lang cannot be used")
                 .1;
 
@@ -688,26 +695,26 @@ async fn submit(url: Option<String>, lang: Option<String>) {
 
     form.insert("data.LanguageId", &lang_code);
 
-    let file_path_string =
+    let file_path_string: Value =
         get_item_toml("./test.toml", "file_path").expect("You have to set file path");
 
-    let file_path = file_path_string.as_str().unwrap();
+    let file_path: &str = file_path_string.as_str().unwrap();
 
-    let code = file_read_to_string(file_path);
+    let code: String = file_read_to_string(file_path);
 
     form.insert("sourceCode", &code);
 
-    let require_addr_selector =
+    let require_addr_selector: Selector =
         Selector::parse(r#"form[class="form-horizontal form-code-submit"]"#).unwrap();
 
-    let require_addr = html
+    let require_addr: &str = html
         .select(&require_addr_selector)
         .next()
         .unwrap()
         .attr("action")
         .unwrap();
 
-    let addr = String::from("https://atcoder.jp") + require_addr;
+    let addr: String = String::from("https://atcoder.jp") + require_addr;
 
     client.post(&addr).form(&form).send().await.unwrap();
 }
@@ -719,9 +726,9 @@ mod tests {
 
     #[tokio::test]
     async fn html() {
-        let c = make_client();
+        let c: Client = make_client();
 
-        let text = request(&c, "https://atcoder.jp/contests/abc356/tasks/abc356_c")
+        let text: String = request(&c, "https://atcoder.jp/contests/abc356/tasks/abc356_c")
             .await
             .unwrap();
 

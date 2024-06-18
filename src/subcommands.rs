@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::io::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
 use dirs::home_dir;
 use reqwest::cookie::{Cookie, Jar};
-use reqwest::Client;
-use scraper::{Html, Selector};
+use reqwest::{Client, Response};
+use scraper::{ElementRef, Html, Selector};
 use toml::Value;
 
 use crate::utils::{
@@ -37,7 +37,7 @@ pub fn init() {
 
 // Show settings
 pub fn show_set() {
-    let mut r = String::new();
+    let mut r: String = String::new();
     File::open("./test.toml")
         .expect(OPEN_ERR)
         .read_to_string(&mut r)
@@ -48,7 +48,10 @@ pub fn show_set() {
 
 // Set the build command
 pub fn set_build(commands: Vec<String>) {
-    let values: Vec<Value> = commands.iter().map(|v| Value::String(v.clone())).collect();
+    let values: Vec<Value> = commands
+        .iter()
+        .map(|v: &String| Value::String(v.clone()))
+        .collect();
 
     set_item_toml("./test.toml", "build", Value::Array(values));
 
@@ -57,7 +60,10 @@ pub fn set_build(commands: Vec<String>) {
 
 // Set the run command
 pub fn set_run(commands: Vec<String>) {
-    let values: Vec<Value> = commands.iter().map(|v| Value::String(v.clone())).collect();
+    let values: Vec<Value> = commands
+        .iter()
+        .map(|v: &String| Value::String(v.clone()))
+        .collect();
 
     set_item_toml("./test.toml", "run", Value::Array(values));
 
@@ -66,7 +72,10 @@ pub fn set_run(commands: Vec<String>) {
 
 // Set the test command
 pub fn set_test(commands: Vec<String>) {
-    let values: Vec<Value> = commands.iter().map(|v| Value::String(v.clone())).collect();
+    let values: Vec<Value> = commands
+        .iter()
+        .map(|v: &String| Value::String(v.clone()))
+        .collect();
 
     set_item_toml("./test.toml", "test", Value::Array(values));
 
@@ -81,25 +90,25 @@ pub fn set_file(name: String) {
 }
 
 pub async fn login(user_name: String, password: String) {
-    let url = "https://atcoder.jp/login?continue=https://atcoder.jp/";
+    let url: &str = "https://atcoder.jp/login?continue=https://atcoder.jp/";
 
-    let cookies = Arc::new(Jar::default());
+    let cookies: Arc<Jar> = Arc::new(Jar::default());
 
-    let client = Client::builder()
+    let client: Client = Client::builder()
         .cookie_store(true)
         .cookie_provider(cookies)
         .build()
         .unwrap();
 
-    let page = client.get(url).send().await.unwrap();
+    let page: Response = client.get(url).send().await.unwrap();
 
-    let text = page.text().await.unwrap();
+    let text: String = page.text().await.unwrap();
 
-    let html = Html::parse_document(&text);
+    let html: Html = Html::parse_document(&text);
 
-    let selector = Selector::parse(r#"input[name="csrf_token"]"#).unwrap();
+    let selector: Selector = Selector::parse(r#"input[name="csrf_token"]"#).unwrap();
 
-    let csrf_token = html
+    let csrf_token: &str = html
         .select(&selector)
         .next()
         .unwrap()
@@ -112,26 +121,26 @@ pub async fn login(user_name: String, password: String) {
     form.insert("password", &password);
     form.insert("csrf_token", csrf_token);
 
-    let response = client.post(url).form(&form).send().await.unwrap();
+    let response: Response = client.post(url).form(&form).send().await.unwrap();
 
     if response.url().path() == "/" {
         let cookies: Vec<Cookie> = response.cookies().collect();
 
-        let login_cookie = cookies
+        let login_cookie: &Cookie = cookies
             .iter()
-            .find(|&v| v.name() == "REVEL_SESSION")
+            .find(|&v: &&Cookie| v.name() == "REVEL_SESSION")
             .unwrap();
 
-        let cookie_value = login_cookie.value();
+        let cookie_value: &str = login_cookie.value();
 
-        let home_dir = dirs::home_dir().unwrap();
-        let home_dir_txt = home_dir.to_str().unwrap();
+        let home_dir: PathBuf = dirs::home_dir().unwrap();
+        let home_dir_txt: &str = home_dir.to_str().unwrap();
 
         if !Path::new(&format!("{}/.attest_global", home_dir_txt)).is_dir() {
             create_dir_all(format!("{}/.attest_global", home_dir_txt)).expect(CREATE_ERR);
         }
 
-        let mut file =
+        let mut file: File =
             File::create(format!("{}/.attest_global/cookies.txt", home_dir_txt)).expect(CREATE_ERR);
 
         writeln!(&mut file, "REVEL_SESSION = {}", cookie_value).expect(WRITE_ERR);
@@ -143,8 +152,8 @@ pub async fn login(user_name: String, password: String) {
 }
 
 pub fn logout() {
-    let home_dir_path = home_dir().unwrap();
-    let home_dir = home_dir_path.to_str().unwrap();
+    let home_dir_path: PathBuf = home_dir().unwrap();
+    let home_dir: &str = home_dir_path.to_str().unwrap();
 
     File::create(format!("{}/.attest_global/cookies.txt", home_dir)).expect(CREATE_ERR);
 }
@@ -159,42 +168,43 @@ pub async fn lang(
         panic!("The lang command must have arguments");
     }
 
-    let client = make_client();
+    let client: Client = make_client();
 
-    let langs = match url {
+    let langs: Vec<(String, String)> = match url {
         Some(u) => {
-            let url = u;
+            let url: String = u;
 
-            let text = request(&client, &url).await.unwrap();
+            let text: String = request(&client, &url).await.unwrap();
 
-            let html = to_html(text);
+            let html: Html = to_html(text);
 
             lang_select(&html)
         }
         None => {
-            let past_contests = request(
+            let past_contests: String = request(
                 &client,
                 "https://atcoder.jp/contests/archive?ratedType=1&category=0&keyword=",
             )
             .await?;
 
-            let html = to_html(past_contests);
+            let html: Html = to_html(past_contests);
 
-            let selector =
+            let selector: Selector =
                 Selector::parse(r#"div[class="table-responsive"] tbody td span + a"#).unwrap();
 
-            let url_elem = html.select(&selector).next().unwrap();
+            let url_elem: ElementRef = html.select(&selector).next().unwrap();
 
-            let url =
+            let url: String =
                 String::from("https://atcoder.jp") + url_elem.attr("href").unwrap() + "/submit";
 
-            let text = request(&client, &url).await.unwrap();
+            let text: String = request(&client, &url).await.unwrap();
 
-            let html = to_html(text);
+            let html: Html = to_html(text);
 
-            let selector = Selector::parse(r#"label[for="select-lang"] + div select"#).unwrap();
+            let selector: Selector =
+                Selector::parse(r#"label[for="select-lang"] + div select"#).unwrap();
 
-            let selected = to_html(html.select(&selector).next().unwrap().html());
+            let selected: Html = to_html(html.select(&selector).next().unwrap().html());
 
             lang_select(&selected)
         }
@@ -214,9 +224,9 @@ pub async fn lang(
             }
         }
     } else if let Some(lang_name) = lang {
-        let lang_code = &langs
+        let lang_code: &str = &langs
             .iter()
-            .find(|&v| v.0 == lang_name)
+            .find(|&v: &&(String, String)| v.0 == lang_name)
             .expect("The lang cannot be used")
             .1;
         set_item_toml("./test.toml", "lang", Value::String(lang_code.to_owned()));
@@ -227,37 +237,3 @@ pub async fn lang(
 
     Ok(())
 }
-
-/*
-// Show the help
-pub fn help() {
-    let text = r#"
-    This is the tool for atcoder
-
-    This tests your code with examples which are on atcoder page
-
-    You can run with "attest url" command
-
-    "attest url example_number" command can test the example number
-
-    Commands:
-        set build commands          setting building command
-        set run commands            setting running command
-        set file file_path          setting program file path
-        help                        show help
-
-    Test command must be satisfied with below:
-        Input:
-            ```
-            R C
-            ```
-            R: Result the executing the run command
-            C: Correct answer
-            You can receive input as either stdin or command line arguments
-
-        Output:
-            If judge is correct answer return `true` else `false`
-"#;
-    println!("{}", text);
-}
-*/

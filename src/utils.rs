@@ -1,10 +1,12 @@
 use std::io::prelude::*;
+use std::path::PathBuf;
 use std::{fs::File, sync::Arc};
 
 use anyhow::Result;
 use reqwest::cookie::Jar;
-use reqwest::{Client, Url};
-use scraper::{Html, Selector};
+use reqwest::{Client, Response, Url};
+use scraper::html::Select;
+use scraper::{ElementRef, Html, Selector};
 use toml::{map::Map, Table, Value};
 
 pub const OPEN_ERR: &str = "something went wrong opening a file";
@@ -14,9 +16,9 @@ pub const WRITE_ERR: &str = "something went wrong writing to a file";
 
 // Request the link
 pub async fn request(client: &Client, url: &str) -> Result<String> {
-    let response = client.get(url).send().await?;
+    let response: Response = client.get(url).send().await?;
 
-    let body = response.text().await?;
+    let body: String = response.text().await?;
 
     Ok(body)
 }
@@ -27,9 +29,9 @@ pub fn to_html(text: String) -> Html {
 }
 
 pub fn make_client() -> Client {
-    let cookies = Arc::new(Jar::default());
+    let cookies: Arc<Jar> = Arc::new(Jar::default());
 
-    let cookies_string = get_cookies();
+    let cookies_string: String = get_cookies();
 
     cookies.add_cookie_str(&cookies_string, &Url::parse("https://atcoder.jp").unwrap());
 
@@ -41,18 +43,18 @@ pub fn make_client() -> Client {
 }
 
 pub fn get_cookies() -> String {
-    let home_dir = dirs::home_dir().unwrap();
-    let home_dir_txt = home_dir.to_str().unwrap();
+    let home_dir: PathBuf = dirs::home_dir().unwrap();
+    let home_dir_txt: &str = home_dir.to_str().unwrap();
 
     file_read_to_string(&format!("{}/.attest_global/cookies.txt", home_dir_txt))
 }
 
 pub fn set_item_toml(path: &str, key: &str, value: Value) {
-    let setting = file_read_to_string(path);
+    let setting: String = file_read_to_string(path);
 
-    let mut f = File::create(path).expect(CREATE_ERR);
+    let mut f: File = File::create(path).expect(CREATE_ERR);
 
-    let mut setting_toml = setting
+    let mut setting_toml: Map<String, Value> = setting
         .parse::<Table>()
         .expect(r#""test.toml" has wrong format"#);
 
@@ -62,13 +64,13 @@ pub fn set_item_toml(path: &str, key: &str, value: Value) {
 }
 
 pub fn lang_select(html: &Html) -> Vec<(String, String)> {
-    let selector = Selector::parse(r#"option"#).unwrap();
+    let selector: Selector = Selector::parse(r#"option"#).unwrap();
 
-    let selected = html.select(&selector);
+    let selected: Select = html.select(&selector);
 
     selected
         .skip(1)
-        .map(|i| {
+        .map(|i: ElementRef| {
             (
                 i.text().next().unwrap().to_string(),
                 i.attr("value").unwrap().to_string(),
@@ -78,20 +80,20 @@ pub fn lang_select(html: &Html) -> Vec<(String, String)> {
 }
 
 pub fn items_toml(path: &str) -> Map<String, Value> {
-    let text = file_read_to_string(path);
+    let text: String = file_read_to_string(path);
 
     text.parse::<Table>()
         .unwrap_or_else(|_| panic!(r#""{}" has wrong format"#, path))
 }
 
 pub fn get_item_toml(path: &str, key: &str) -> Option<Value> {
-    let items = items_toml(path);
+    let items: Map<String, Value> = items_toml(path);
 
     Some(items.get(key)?.to_owned())
 }
 
 pub fn file_read_to_string(path: &str) -> String {
-    let mut f = String::new();
+    let mut f: String = String::new();
     File::open(path)
         .expect(OPEN_ERR)
         .read_to_string(&mut f)
