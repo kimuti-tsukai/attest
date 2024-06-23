@@ -1,1 +1,6 @@
 /target
+/.idea
+/test_env
+/test_env/.attest
+/test_env/.attest_global
+/test_env/test.toml

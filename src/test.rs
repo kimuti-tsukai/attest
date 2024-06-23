@@ -70,7 +70,7 @@ fn is_same_link(url: &str) -> bool {
 fn examples_from_cache() -> Vec<IO> {
     let text: String = file_read_to_string("./.attest/examples.json");
 
-    serde_json::from_str(&text).unwrap()
+    serde_json::from_str(&text.trim()).unwrap()
 }
 
 // Get time limit from cache if the link is same
@@ -83,13 +83,13 @@ fn time_limit_from_cache() -> u128 {
 // Save cache if the link is different
 fn save_cache(url: &str, time_limit: u128, examples: &Vec<IO>) {
     let mut l: File = File::create("./.attest/url.txt").expect(CREATE_ERR);
-    writeln!(&mut l, "{}", url).expect(WRITE_ERR);
+    write!(&mut l, "{}", url).expect(WRITE_ERR);
 
     let mut t: File = File::create("./.attest/time_limit.txt").expect(CREATE_ERR);
-    writeln!(&mut t, "{}", time_limit).expect(WRITE_ERR);
+    write!(&mut t, "{}", time_limit).expect(WRITE_ERR);
 
     let mut e: File = File::create("./.attest/examples.json").expect(CREATE_ERR);
-    writeln!(&mut e, "{}", serde_json::to_string(examples).unwrap()).expect(WRITE_ERR);
+    write!(&mut e, "{}", serde_json::to_string(examples).unwrap()).expect(WRITE_ERR);
 }
 
 // Select examples from Html
@@ -382,7 +382,7 @@ async fn tester(
 
         let time: u128 = start.elapsed().as_millis();
 
-        check(output, time, io, &test_commands, &dir, &mut results);
+        results.push(check(output, time, io, &test_commands, &dir));
     }
 
     for (i, r) in results.iter().enumerate() {
@@ -449,11 +449,10 @@ fn check(
     io: &IO,
     test_command: &Option<Vec<String>>,
     dir: &PathBuf,
-    results: &mut Vec<Res>,
-) {
+) -> Res {
     let result: &str = std::str::from_utf8(&output.stdout).unwrap_or("");
 
-    if output.status.code() == Some(0) {
+    let return_value: Res = if output.status.code() == Some(0) {
         let condition: bool =
             if test_command.is_some() && !test_command.as_ref().unwrap().is_empty() {
                 spawn_test_command(test_command, result, io, dir)
@@ -464,7 +463,7 @@ fn check(
         if condition {
             println!("\x1b[32mAC\x1b[m");
             println!("input:\n{}", io.input);
-            results.push(Res::AC);
+            Res::AC
         } else {
             println!("\x1b[33mWA\x1b[m");
 
@@ -472,16 +471,19 @@ fn check(
 
             println!("input:\n{}", io.input);
             println!("excepted output:\n{}", io.output);
-            results.push(Res::WA);
+            Res::WA
         }
     } else {
         println!("\x1b[33mRE\x1b[m\n");
         println!("input:\n{}", io.input);
-        results.push(Res::RE);
-    }
+        Res::RE
+    };
+
     println!("output:\n{}", result);
 
     println!("stderr:\n{}", std::str::from_utf8(&output.stderr).unwrap());
 
     println!("time: {}", time);
+
+    return_value
 }

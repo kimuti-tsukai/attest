@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::io::prelude::*;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -133,15 +133,18 @@ pub async fn login(user_name: String, password: String) {
 
         let cookie_value: &str = login_cookie.value();
 
-        let home_dir: PathBuf = dirs::home_dir().unwrap();
-        let home_dir_txt: &str = home_dir.to_str().unwrap();
+        let mut dir: PathBuf = dirs::home_dir().unwrap();
 
-        if !Path::new(&format!("{}/.attest_global", home_dir_txt)).is_dir() {
-            create_dir_all(format!("{}/.attest_global", home_dir_txt)).expect(CREATE_ERR);
+        dir.push(".attest_global");
+
+        if dir.is_dir() {
+            create_dir_all(&dir).expect(CREATE_ERR);
         }
 
+        dir.push("cookies.txt");
+
         let mut file: File =
-            File::create(format!("{}/.attest_global/cookies.txt", home_dir_txt)).expect(CREATE_ERR);
+            File::create(&dir).expect(CREATE_ERR);
 
         writeln!(&mut file, "REVEL_SESSION = {}", cookie_value).expect(WRITE_ERR);
 
@@ -152,10 +155,11 @@ pub async fn login(user_name: String, password: String) {
 }
 
 pub fn logout() {
-    let home_dir_path: PathBuf = home_dir().unwrap();
-    let home_dir: &str = home_dir_path.to_str().unwrap();
+    let mut dir: PathBuf = home_dir().unwrap();
 
-    File::create(format!("{}/.attest_global/cookies.txt", home_dir)).expect(CREATE_ERR);
+    dir.push(".attest_global/cookies.txt");
+
+    File::create(dir).expect(CREATE_ERR);
 }
 
 pub async fn lang(

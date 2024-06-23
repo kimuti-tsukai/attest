@@ -1,6 +1,7 @@
+use std::fmt::Debug;
 use std::io::prelude::*;
-use std::path::PathBuf;
-use std::{fs::File, sync::Arc};
+use std::path::{Path, PathBuf};
+use std::{fs::{File, read_to_string}, sync::Arc};
 
 use anyhow::Result;
 use reqwest::cookie::Jar;
@@ -43,16 +44,17 @@ pub fn make_client() -> Client {
 }
 
 pub fn get_cookies() -> String {
-    let home_dir: PathBuf = dirs::home_dir().unwrap();
-    let home_dir_txt: &str = home_dir.to_str().unwrap();
+    let mut dir: PathBuf = dirs::home_dir().unwrap();
 
-    file_read_to_string(&format!("{}/.attest_global/cookies.txt", home_dir_txt))
+    dir.push(".attest_global/cookies.txt");
+
+    file_read_to_string(dir)
 }
 
-pub fn set_item_toml(path: &str, key: &str, value: Value) {
-    let setting: String = file_read_to_string(path);
+pub fn set_item_toml<T: AsRef<Path>>(path: T, key: &str, value: Value) {
+    let setting: String = file_read_to_string(&path);
 
-    let mut f: File = File::create(path).expect(CREATE_ERR);
+    let mut f: File = File::create(&path).expect(CREATE_ERR);
 
     let mut setting_toml: Map<String, Value> = setting
         .parse::<Table>()
@@ -79,27 +81,21 @@ pub fn lang_select(html: &Html) -> Vec<(String, String)> {
         .collect()
 }
 
-pub fn items_toml(path: &str) -> Map<String, Value> {
-    let text: String = file_read_to_string(path);
+pub fn items_toml<T: AsRef<Path> + Debug>(path: T) -> Map<String, Value> {
+    let text: String = file_read_to_string(&path);
 
     text.parse::<Table>()
-        .unwrap_or_else(|_| panic!(r#""{}" has wrong format"#, path))
+        .unwrap_or_else(|_| panic!("{:?} has wrong format", path))
 }
 
-pub fn get_item_toml(path: &str, key: &str) -> Option<Value> {
+pub fn get_item_toml<T: AsRef<Path> + Debug>(path: T, key: &str) -> Option<Value> {
     let items: Map<String, Value> = items_toml(path);
 
     Some(items.get(key)?.to_owned())
 }
 
-pub fn file_read_to_string(path: &str) -> String {
-    let mut f: String = String::new();
-    File::open(path)
-        .expect(OPEN_ERR)
-        .read_to_string(&mut f)
-        .expect(READ_ERR);
-
-    f
+pub fn file_read_to_string<T: AsRef<Path>>(path: T) -> String {
+    read_to_string(path).expect(READ_ERR)
 }
 
 pub fn link_from_copy() -> String {
