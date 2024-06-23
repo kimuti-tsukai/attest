@@ -4,3 +4,4 @@
 /test_env/.attest
 /test_env/.attest_global
 /test_env/test.toml
+/.DS_Store
