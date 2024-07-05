@@ -295,26 +295,6 @@ fn get_test_command(setting_toml: &Map<String, Value>) -> Option<Vec<String>> {
     )
 }
 
-fn spawn_command(
-    io: &IO,
-    dir: &PathBuf,
-    execute_command: &str,
-    args: &[String],
-) -> impl Future<Output = Result<Output, std::io::Error>> {
-    let pipe: Child = StdCommand::new("echo")
-        .arg(&io.input)
-        .current_dir(dir)
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-
-    Command::new(execute_command)
-        .args(args)
-        .stdin(Stdio::from(pipe.stdout.unwrap()))
-        .current_dir(dir)
-        .output()
-}
-
 async fn tester(
     examples: &[IO],
     setting_toml: &Map<String, Value>,
@@ -382,8 +362,12 @@ async fn tester(
 
         let time: u128 = start.elapsed().as_millis();
 
-        results.push(check(output, time, io, &test_commands, &dir));
+        let test_result = check(output, time, io, &test_commands, &dir);
+
+        results.push(test_result);
     }
+
+    println!();
 
     for (i, r) in results.iter().enumerate() {
         println!(
@@ -412,13 +396,33 @@ pub enum Res {
     TLE,
 }
 
+fn spawn_command(
+    io: &IO,
+    dir: &PathBuf,
+    execute_command: &str,
+    args: &[String],
+) -> impl Future<Output = Result<Output, std::io::Error>> {
+    let pipe: Child = StdCommand::new("echo")
+        .arg(&io.input)
+        .current_dir(dir)
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    Command::new(execute_command)
+        .args(args)
+        .stdin(Stdio::from(pipe.stdout.unwrap()))
+        .current_dir(dir)
+        .output()
+}
+
 fn spawn_test_command(
     test_command: &Option<Vec<String>>,
     result: &str,
     io: &IO,
     dir: &PathBuf,
 ) -> bool {
-    let command: &Vec<String> = test_command.as_ref().unwrap();
+    let Some(command) = test_command.as_ref() else { return false; };
 
     let pipe: Child = StdCommand::new("echo")
         .args([result, &io.output])
@@ -474,7 +478,7 @@ fn check(
             Res::WA
         }
     } else {
-        println!("\x1b[33mRE\x1b[m\n");
+        println!("\x1b[33mRE\x1b[m");
         println!("input:\n{}", io.input);
         Res::RE
     };
