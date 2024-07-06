@@ -376,7 +376,7 @@ async fn tester(
             match r {
                 Res::AC => "\x1b[32mAC\x1b[m",
                 Res::WA => "\x1b[33mWA\x1b[m",
-                Res::RE => "\x1b[33mRE\x1b[m\n",
+                Res::RE => "\x1b[33mRE\x1b[m",
                 Res::TLE => "\x1b[33mTLE\x1b[m",
                 _ => "",
             }
