@@ -70,14 +70,14 @@ fn is_same_link(url: &str) -> bool {
 fn examples_from_cache() -> Vec<IO> {
     let text: String = file_read_to_string("./.attest/examples.json");
 
-    serde_json::from_str(&text.trim()).unwrap()
+    serde_json::from_str(text.trim()).unwrap()
 }
 
 // Get time limit from cache if the link is same
 fn time_limit_from_cache() -> u128 {
     let time: String = file_read_to_string("./.attest/time_limit.txt");
 
-    time.parse().unwrap()
+    time.trim().parse().unwrap()
 }
 
 // Save cache if the link is different
@@ -176,7 +176,7 @@ fn is_same_code(setting_toml: &Map<String, Value>) -> Option<bool> {
 
     let before: String = file_read_to_string("./.attest/before.txt");
 
-    let before_hash: Option<u64> = match before.parse() {
+    let before_hash: Option<u64> = match before.trim().parse() {
         Ok(x) => Some(x),
         Err(e) => match e.kind() {
             IntErrorKind::Empty => None,
