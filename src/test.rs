@@ -30,6 +30,45 @@ use scraper::{Html, Selector};
 
 use regex::Regex;
 
+#[derive(Clone,Copy,Hash,Debug)]
+enum Marker {
+    Plus,
+    Minus,
+    X
+}
+
+impl std::fmt::Display for Marker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Marker::Plus => "\x1b[32m[+]\x1b[m",
+                Marker::Minus => "\x1b[31m[-]\x1b[m",
+                Marker::X => "\x1b[35m[x]\x1b[m",
+            }
+        )
+    }
+}
+
+impl From<Res> for Marker {
+    fn from(value: Res) -> Self {
+        match value {
+            Res::AC => Marker::Plus,
+            _ => Marker::Minus
+        }
+    }
+}
+
+impl From<&Res> for Marker {
+    fn from(value: &Res) -> Self {
+        match value {
+            Res::AC => Marker::Plus,
+            _ => Marker::Minus
+        }
+    }
+}
+
 
 // Function to test
 pub async fn test(url: Option<String>, example_num: Vec<usize>) -> Result<Option<Vec<Res>>> {
@@ -253,8 +292,8 @@ fn build_wrap(
 ) -> Result<(), ()> {
     if let Some(output) = build(setting_toml, dir) {
         if output.status.code().unwrap() != 0 {
-            println!("\x1b[33mCE\x1b[m\n");
-            println!("stderr:\n{}", std::str::from_utf8(&output.stderr).unwrap());
+            println!("{} \x1b[33mCE\x1b[m\n", Marker::Minus);
+            println!("{} stderr:\n{}", Marker::X, std::str::from_utf8(&output.stderr).unwrap());
             results.push(Res::CE);
 
             return Err(());
@@ -328,7 +367,7 @@ async fn tester(
             continue;
         }
 
-        println!("example{}", index + 1);
+        println!("{} \x1b[35mexample{}\x1b[m", Marker::X, index + 1);
 
         let output = spawn_command(io, &dir, execute_command, args);
 
@@ -346,14 +385,14 @@ async fn tester(
                 Err(_) => {
                     let time: u128 = start.elapsed().as_millis();
 
-                    println!("\x1b[33mTLE\x1b[m");
+                    println!("{} \x1b[33mTLE\x1b[m", Marker::Minus);
 
                     println!();
 
-                    println!("input:\n{}", io.input);
-                    println!("expect output:\n{}", io.output);
+                    println!("{} input:\n{}", Marker::X, io.input);
+                    println!("{} expect output:\n{}", Marker::X, io.output);
 
-                    println!("time: {}", time);
+                    println!("{} time: {}", Marker::X, time);
 
                     results.push(Res::TLE);
                     continue;
@@ -371,7 +410,8 @@ async fn tester(
 
     for (i, r) in results.iter().enumerate() {
         println!(
-            "example{}: {}",
+            "{} example{}: {}",
+            Marker::from(r),
             i + 1,
             match r {
                 Res::AC => "\x1b[32mAC\x1b[m",
@@ -421,11 +461,11 @@ fn spawn_test_command(
     result: &str,
     io: &IO,
     dir: &PathBuf,
-) -> bool {
-    let Some(command) = test_command.as_ref() else { return false; };
+) -> (bool, Option<String>) {
+    let Some(command) = test_command.as_ref() else { return (false, None); };
 
     let pipe: Child = StdCommand::new("echo")
-        .args([result, &io.output])
+        .arg(format!("{}\n{}", result, &io.output))
         .current_dir(dir)
         .stdout(Stdio::piped())
         .spawn()
@@ -438,13 +478,25 @@ fn spawn_test_command(
         .output()
         .unwrap();
 
-    let judge: &str = std::str::from_utf8(&test_output.stdout).unwrap_or("");
+        if test_output.status.code() != Some(0) {
+            eprintln!("{} The test command failed", Marker::Minus);
+            eprintln!("{} Error message", Marker::X);
+            eprintln!("{}", String::from_utf8(test_output.stderr).expect("The std err is not utf8"));
+            panic!("The test command failed");
+        }
 
-    match judge {
-        "true" => true,
-        "false" => false,
-        _ => panic!("The test command failed"),
-    }
+    let mut judge = std::str::from_utf8(&test_output.stdout).unwrap_or("").split('\n');
+
+    let judge_res = judge.next().unwrap_or("");
+
+    (
+        match judge_res {
+            "true" => true,
+            "false" => false,
+            _ => panic!("{} Output format is wrong. The first line of output must be \"true\" or \"false\"", Marker::Minus),
+        },
+        judge.next().map(|x| x.to_string())
+    )
 }
 
 fn check(
@@ -457,37 +509,45 @@ fn check(
     let result: &str = std::str::from_utf8(&output.stdout).unwrap_or("");
 
     let return_value: Res = if output.status.code() == Some(0) {
-        let condition: bool =
+        let (condition, discription): (bool, Option<String>) =
             if test_command.is_some() && !test_command.as_ref().unwrap().is_empty() {
                 spawn_test_command(test_command, result, io, dir)
             } else {
-                result == io.output
+                (result == io.output, None)
             };
 
+        let print_discription = || if let Some(d) = discription {
+            println!("{} discription:\n{}", Marker::X, d);
+        };
+
         if condition {
-            println!("\x1b[32mAC\x1b[m");
-            println!("input:\n{}", io.input);
+            println!("{} \x1b[32mAC\x1b[m", Marker::Plus);
+            print_discription();
+            println!();
+            println!("{} input:\n{}", Marker::X, io.input);
             Res::AC
         } else {
-            println!("\x1b[33mWA\x1b[m");
+            println!("{} \x1b[33mWA\x1b[m", Marker::Minus);
+            print_discription();
 
             println!();
 
-            println!("input:\n{}", io.input);
-            println!("excepted output:\n{}", io.output);
+            println!("{} input:\n{}", Marker::X, io.input);
+            println!("{} excepted output:\n{}", Marker::X, io.output);
             Res::WA
         }
     } else {
-        println!("\x1b[33mRE\x1b[m");
-        println!("input:\n{}", io.input);
+        println!("{} \x1b[33mRE\x1b[m", Marker::Minus);
+        println!("{} input:\n{}", Marker::X, io.input);
         Res::RE
     };
 
-    println!("output:\n{}", result);
+    println!("{} output:\n{}", Marker::X, result);
 
-    println!("stderr:\n{}", std::str::from_utf8(&output.stderr).unwrap());
+    println!("{} stderr:\n{}", Marker::X, std::str::from_utf8(&output.stderr).unwrap());
 
-    println!("time: {}", time);
+    println!("{} time: {}", Marker::X, time);
+    println!();
 
     return_value
 }

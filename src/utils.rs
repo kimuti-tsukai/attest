@@ -94,8 +94,8 @@ pub fn get_item_toml<T: AsRef<Path> + Debug>(path: T, key: &str) -> Option<Value
     Some(items.get(key)?.to_owned())
 }
 
-pub fn file_read_to_string<T: AsRef<Path>>(path: T) -> String {
-    read_to_string(path).expect(READ_ERR)
+pub fn file_read_to_string<T: AsRef<Path> + Clone>(path: T) -> String {
+    read_to_string(path.clone()).unwrap_or_else(|_| panic!("{} file does not exist", path.as_ref().as_os_str().to_str().unwrap_or("")))
 }
 
 pub fn link_from_copy() -> String {

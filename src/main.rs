@@ -86,16 +86,25 @@ enum Sets {
     },
     #[command(about = r#"Set the test command
 Test command must be satisfied with below:
+
+You had better use command line arguments.
+
+Output:
+    ```
+    J
+    D
+    ```
+    J: If judge is correct `true` else `false`
+    D (Option): Other discription
+
 Input:
     ```
-    R C
+    R
+    C
     ```
     R: Result the executing the run command
     C: Correct answer
-    You can receive input as either stdin or command line arguments
-
-Output:
-    If judge is correct answer return `true` else `false`"#)]
+    You can receive input as either stdin or command line arguments"#)]
     Test {
         #[clap(value_delimiter = ' ')]
         command: Vec<String>,
