@@ -572,7 +572,7 @@ async fn check(
         Res::RE
     };
 
-    println!("{} output:\n{}", Marker::X, result);
+    println!("{} output:\n{}\n", Marker::X, result);
 
     println!(
         "{} stderr:\n{}",
