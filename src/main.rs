@@ -1,7 +1,7 @@
 mod subcommands;
-mod utils;
-mod test;
 mod submit;
+mod test;
+mod utils;
 
 use test::{test, Res};
 
@@ -10,7 +10,6 @@ use submit::submit;
 use anyhow::Result;
 
 use clap::{Parser, Subcommand};
-
 
 /// Tester for AtCoder examples.
 /// This tests your program in the example cases
@@ -125,10 +124,10 @@ async fn main() -> Result<()> {
             submit(url, lang).await;
         }
         Arg::Tebmit { url, lang } => {
-            let results: Option<Vec<Res>> = test(url.clone(), Vec::new()).await?;
+            let results: Option<Vec<Option<Res>>> = test(url.clone(), Vec::new()).await?;
 
             if let Some(v) = results {
-                if v.iter().all(|&a: &Res| a == Res::AC) {
+                if v.iter().all(|&a: &Option<Res>| a == Some(Res::AC)) {
                     submit(url, lang).await;
                 }
             }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::utils::{
-    file_read_to_string, get_item_toml, lang_select, make_client, request, to_html, link_from_copy,
+    file_read_to_string, get_item_toml, lang_select, link_from_copy, make_client, request, to_html,
 };
 
 use reqwest::Client;
@@ -9,7 +9,6 @@ use reqwest::Client;
 use toml::Value;
 
 use scraper::{Html, Selector};
-
 
 // Submit Code
 pub async fn submit(url: Option<String>, lang: Option<String>) {

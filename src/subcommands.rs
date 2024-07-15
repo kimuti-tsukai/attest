@@ -143,8 +143,7 @@ pub async fn login(user_name: String, password: String) {
 
         dir.push("cookies.txt");
 
-        let mut file: File =
-            File::create(&dir).expect(CREATE_ERR);
+        let mut file: File = File::create(&dir).expect(CREATE_ERR);
 
         writeln!(&mut file, "REVEL_SESSION = {}", cookie_value).expect(WRITE_ERR);
 

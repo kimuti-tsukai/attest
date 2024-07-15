@@ -1,7 +1,10 @@
 use std::fmt::Debug;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
-use std::{fs::{File, read_to_string}, sync::Arc};
+use std::{
+    fs::{read_to_string, File},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use reqwest::cookie::Jar;
@@ -95,7 +98,12 @@ pub fn get_item_toml<T: AsRef<Path> + Debug>(path: T, key: &str) -> Option<Value
 }
 
 pub fn file_read_to_string<T: AsRef<Path> + Clone>(path: T) -> String {
-    read_to_string(path.clone()).unwrap_or_else(|_| panic!("{} file does not exist", path.as_ref().as_os_str().to_str().unwrap_or("")))
+    read_to_string(path.clone()).unwrap_or_else(|_| {
+        panic!(
+            "{} file does not exist",
+            path.as_ref().as_os_str().to_str().unwrap_or("")
+        )
+    })
 }
 
 pub fn link_from_copy() -> String {

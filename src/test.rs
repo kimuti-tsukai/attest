@@ -5,12 +5,12 @@ use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::num::IntErrorKind;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command as StdCommand, Output, Stdio};
+use std::process::{Command as StdCommand, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::utils::{
-    file_read_to_string, items_toml, make_client, request, to_html, link_from_copy,
-    CREATE_ERR, WRITE_ERR,
+    file_read_to_string, items_toml, link_from_copy, make_client, request, to_html, CREATE_ERR,
+    WRITE_ERR,
 };
 
 use anyhow::Result;
@@ -19,7 +19,8 @@ use reqwest::Client;
 
 use rustc_hash::FxHasher;
 
-use tokio::process::Command;
+use tokio::io::AsyncWriteExt;
+use tokio::process::{Child, Command};
 use tokio::time;
 
 use toml::{map::Map, Value};
@@ -30,11 +31,11 @@ use scraper::{Html, Selector};
 
 use regex::Regex;
 
-#[derive(Clone,Copy,Hash,Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 enum Marker {
     Plus,
     Minus,
-    X
+    X,
 }
 
 impl std::fmt::Display for Marker {
@@ -55,7 +56,7 @@ impl From<Res> for Marker {
     fn from(value: Res) -> Self {
         match value {
             Res::AC => Marker::Plus,
-            _ => Marker::Minus
+            _ => Marker::Minus,
         }
     }
 }
@@ -64,14 +65,16 @@ impl From<&Res> for Marker {
     fn from(value: &Res) -> Self {
         match value {
             Res::AC => Marker::Plus,
-            _ => Marker::Minus
+            _ => Marker::Minus,
         }
     }
 }
 
-
 // Function to test
-pub async fn test(url: Option<String>, example_num: Vec<usize>) -> Result<Option<Vec<Res>>> {
+pub async fn test(
+    url: Option<String>,
+    example_num: Vec<usize>,
+) -> Result<Option<Vec<Option<Res>>>> {
     let (examples, time_limit): (Vec<IO>, u128);
 
     if url.is_none() || is_same_link(&url.clone().unwrap()) {
@@ -95,7 +98,8 @@ pub async fn test(url: Option<String>, example_num: Vec<usize>) -> Result<Option
     }
     let setting_toml: Map<String, Value> = items_toml("./test.toml");
 
-    let results: Option<Vec<Res>> = tester(&examples, &setting_toml, time_limit, example_num).await;
+    let results: Option<Vec<Option<Res>>> =
+        tester(&examples, &setting_toml, time_limit, example_num).await;
 
     Ok(results)
 }
@@ -288,13 +292,17 @@ fn build(setting_toml: &Map<String, Value>, dir: &PathBuf) -> Option<Output> {
 fn build_wrap(
     setting_toml: &Map<String, Value>,
     dir: &PathBuf,
-    results: &mut Vec<Res>,
+    results: &mut Vec<Option<Res>>,
 ) -> Result<(), ()> {
     if let Some(output) = build(setting_toml, dir) {
         if output.status.code().unwrap() != 0 {
             println!("{} \x1b[33mCE\x1b[m\n", Marker::Minus);
-            println!("{} stderr:\n{}", Marker::X, std::str::from_utf8(&output.stderr).unwrap());
-            results.push(Res::CE);
+            println!(
+                "{} stderr:\n{}",
+                Marker::X,
+                std::str::from_utf8(&output.stderr).unwrap()
+            );
+            results.push(Some(Res::CE));
 
             return Err(());
         }
@@ -339,10 +347,10 @@ async fn tester(
     setting_toml: &Map<String, Value>,
     time_limit: u128,
     example_num: Vec<usize>,
-) -> Option<Vec<Res>> {
+) -> Option<Vec<Option<Res>>> {
     let dir: PathBuf = current_dir().unwrap();
 
-    let mut results: Vec<Res> = Vec::new();
+    let mut results: Vec<Option<Res>> = vec![None; examples.len()];
 
     if build_wrap(setting_toml, &dir, &mut results).is_err() {
         return None;
@@ -367,9 +375,12 @@ async fn tester(
             continue;
         }
 
+        // let mut written = String::new();
+        // let mut buf = BufWriter::new(&mut written);
+
         println!("{} \x1b[35mexample{}\x1b[m", Marker::X, index + 1);
 
-        let output = spawn_command(io, &dir, execute_command, args);
+        let output = spawn_command(&io.input, &dir, execute_command, args).await;
 
         let start: Instant = Instant::now();
 
@@ -394,7 +405,7 @@ async fn tester(
 
                     println!("{} time: {}", Marker::X, time);
 
-                    results.push(Res::TLE);
+                    results[index] = Some(Res::TLE);
                     continue;
                 }
             };
@@ -403,24 +414,26 @@ async fn tester(
 
         let test_result = check(output, time, io, &test_commands, &dir);
 
-        results.push(test_result);
+        results[index] = Some(test_result.await);
     }
 
     println!();
 
     for (i, r) in results.iter().enumerate() {
-        println!(
-            "{} example{}: {}",
-            Marker::from(r),
-            i + 1,
-            match r {
-                Res::AC => "\x1b[32mAC\x1b[m",
-                Res::WA => "\x1b[33mWA\x1b[m",
-                Res::RE => "\x1b[33mRE\x1b[m",
-                Res::TLE => "\x1b[33mTLE\x1b[m",
-                _ => "",
-            }
-        );
+        if let Some(r) = r {
+            println!(
+                "{} example{}: {}",
+                Marker::from(r),
+                i + 1,
+                match r {
+                    Res::AC => "\x1b[32mAC\x1b[m",
+                    Res::WA => "\x1b[33mWA\x1b[m",
+                    Res::RE => "\x1b[33mRE\x1b[m",
+                    Res::TLE => "\x1b[33mTLE\x1b[m",
+                    _ => "",
+                }
+            );
+        }
     }
 
     Some(results)
@@ -436,56 +449,68 @@ pub enum Res {
     TLE,
 }
 
-fn spawn_command(
-    io: &IO,
+async fn spawn_command(
+    input: &str,
     dir: &PathBuf,
     execute_command: &str,
     args: &[String],
 ) -> impl Future<Output = Result<Output, std::io::Error>> {
-    let pipe: Child = StdCommand::new("echo")
-        .arg(&io.input)
-        .current_dir(dir)
+    let mut child: Child = Command::new(execute_command)
+        .args(args)
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
+        .current_dir(dir)
         .spawn()
         .unwrap();
 
-    Command::new(execute_command)
-        .args(args)
-        .stdin(Stdio::from(pipe.stdout.unwrap()))
-        .current_dir(dir)
-        .output()
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .await
+        .unwrap();
+
+    child.wait_with_output()
 }
 
-fn spawn_test_command(
+async fn spawn_test_command(
     test_command: &Option<Vec<String>>,
     result: &str,
     io: &IO,
     dir: &PathBuf,
 ) -> (bool, Option<String>) {
-    let Some(command) = test_command.as_ref() else { return (false, None); };
+    let Some(command) = test_command.as_ref() else {
+        return (false, None);
+    };
 
-    let pipe: Child = StdCommand::new("echo")
-        .arg(format!("{}\n{}", result, &io.output))
-        .current_dir(dir)
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
+    let mut args = command[1..].to_vec();
+    args.push(result.to_string());
+    args.push(io.output.clone());
 
-    let test_output: Output = StdCommand::new(command.first().unwrap())
-        .args([result, &io.output])
-        .stdin(Stdio::from(pipe.stdout.unwrap()))
-        .current_dir(dir)
-        .output()
-        .unwrap();
+    let test_output: Output = spawn_command(
+        &format!("{}\n{}", result, &io.output),
+        dir,
+        command.first().unwrap(),
+        &args[..],
+    )
+    .await
+    .await
+    .unwrap();
 
-        if test_output.status.code() != Some(0) {
-            eprintln!("{} The test command failed", Marker::Minus);
-            eprintln!("{} Error message", Marker::X);
-            eprintln!("{}", String::from_utf8(test_output.stderr).expect("The std err is not utf8"));
-            panic!("The test command failed");
-        }
+    if test_output.status.code() != Some(0) {
+        eprintln!("{} The test command failed", Marker::Minus);
+        eprintln!("{} Error message", Marker::X);
+        eprintln!(
+            "{}",
+            String::from_utf8(test_output.stderr).expect("The std err is not utf8")
+        );
+        panic!("The test command failed");
+    }
 
-    let mut judge = std::str::from_utf8(&test_output.stdout).unwrap_or("").split('\n');
+    let mut judge = std::str::from_utf8(&test_output.stdout)
+        .unwrap_or("")
+        .split('\n');
 
     let judge_res = judge.next().unwrap_or("");
 
@@ -493,13 +518,16 @@ fn spawn_test_command(
         match judge_res {
             "true" => true,
             "false" => false,
-            _ => panic!("{} Output format is wrong. The first line of output must be \"true\" or \"false\"", Marker::Minus),
+            _ => panic!(
+                "{} Output format is wrong. The first line of output must be \"true\" or \"false\"",
+                Marker::Minus
+            ),
         },
-        judge.next().map(|x| x.to_string())
+        judge.next().map(|x| x.to_string()),
     )
 }
 
-fn check(
+async fn check(
     output: Output,
     time: u128,
     io: &IO,
@@ -511,13 +539,15 @@ fn check(
     let return_value: Res = if output.status.code() == Some(0) {
         let (condition, discription): (bool, Option<String>) =
             if test_command.is_some() && !test_command.as_ref().unwrap().is_empty() {
-                spawn_test_command(test_command, result, io, dir)
+                spawn_test_command(test_command, result, io, dir).await
             } else {
                 (result == io.output, None)
             };
 
-        let print_discription = || if let Some(d) = discription {
-            println!("{} discription:\n{}", Marker::X, d);
+        let print_discription = || {
+            if let Some(d) = discription {
+                println!("{} discription:\n{}", Marker::X, d);
+            }
         };
 
         if condition {
@@ -544,7 +574,11 @@ fn check(
 
     println!("{} output:\n{}", Marker::X, result);
 
-    println!("{} stderr:\n{}", Marker::X, std::str::from_utf8(&output.stderr).unwrap());
+    println!(
+        "{} stderr:\n{}",
+        Marker::X,
+        std::str::from_utf8(&output.stderr).unwrap()
+    );
 
     println!("{} time: {}", Marker::X, time);
     println!();
