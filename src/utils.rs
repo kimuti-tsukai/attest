@@ -13,10 +13,10 @@ use scraper::html::Select;
 use scraper::{ElementRef, Html, Selector};
 use toml::{map::Map, Table, Value};
 
-pub const OPEN_ERR: &str = "something went wrong opening a file";
-pub const READ_ERR: &str = "something went wrong reading a file";
-pub const CREATE_ERR: &str = "something went wrong creating a file or directory";
-pub const WRITE_ERR: &str = "something went wrong writing to a file";
+pub const OPEN_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong opening a file";
+pub const READ_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong reading a file";
+pub const CREATE_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong creating a file or directory";
+pub const WRITE_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong writing to a file";
 
 // Request the link
 pub async fn request(client: &Client, url: &str) -> Result<String> {
@@ -61,7 +61,7 @@ pub fn set_item_toml<T: AsRef<Path>>(path: T, key: &str, value: Value) {
 
     let mut setting_toml: Map<String, Value> = setting
         .parse::<Table>()
-        .expect(r#""attest.toml" has wrong format"#);
+        .unwrap_or_else(|_| panic!("{}", Marker::minus(r#""attest.toml" has wrong format"#)));
 
     setting_toml.insert(String::from(key), value);
 
@@ -88,7 +88,7 @@ pub fn items_toml<T: AsRef<Path> + Debug>(path: T) -> Map<String, Value> {
     let text: String = file_read_to_string(&path);
 
     text.parse::<Table>()
-        .unwrap_or_else(|_| panic!("{:?} has wrong format", path))
+        .unwrap_or_else(|_| panic!("{} {:?} has wrong format", Marker::Minus, path))
 }
 
 pub fn get_item_toml<T: AsRef<Path> + Debug>(path: T, key: &str) -> Option<Value> {
@@ -100,7 +100,8 @@ pub fn get_item_toml<T: AsRef<Path> + Debug>(path: T, key: &str) -> Option<Value
 pub fn file_read_to_string<T: AsRef<Path> + Clone>(path: T) -> String {
     read_to_string(path.clone()).unwrap_or_else(|_| {
         panic!(
-            "{} file does not exist",
+            "{} {} file does not exist",
+            Marker::Minus,
             path.as_ref().as_os_str().to_str().unwrap_or("")
         )
     })
@@ -108,4 +109,39 @@ pub fn file_read_to_string<T: AsRef<Path> + Clone>(path: T) -> String {
 
 pub fn link_from_copy() -> String {
     file_read_to_string("./.attest/url.txt")
+}
+
+#[derive(Clone, Copy, Hash, Debug)]
+pub enum Marker {
+    Plus,
+    Minus,
+    X,
+}
+
+impl std::fmt::Display for Marker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Marker::Plus => "\x1b[32m[+]\x1b[m",
+                Marker::Minus => "\x1b[31m[-]\x1b[m",
+                Marker::X => "\x1b[35m[x]\x1b[m",
+            }
+        )
+    }
+}
+
+impl Marker {
+    pub fn plus<T: std::fmt::Display>(value: T) -> String {
+        format!("{} {}", Marker::Plus, value)
+    }
+
+    pub fn minus<T: std::fmt::Display>(value: T) -> String {
+        format!("{} {}", Marker::Minus, value)
+    }
+
+    // pub fn x<T: std::fmt::Display>(value: T) -> String {
+    //     format!("{} {}", Marker::X, value)
+    // }
 }

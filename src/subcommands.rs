@@ -12,13 +12,13 @@ use scraper::{ElementRef, Html, Selector};
 use toml::Value;
 
 use crate::utils::{
-    lang_select, make_client, request, set_item_toml, to_html, CREATE_ERR, OPEN_ERR, READ_ERR,
-    WRITE_ERR,
+    lang_select, make_client, request, set_item_toml, to_html, Marker, CREATE_ERR, OPEN_ERR,
+    READ_ERR, WRITE_ERR,
 };
 
 // Initialize
 pub fn init() {
-    File::create("./attest.toml").expect("something went wrong creating a file");
+    File::create("./attest.toml").expect(CREATE_ERR);
 
     create_dir_all("./.attest").expect(CREATE_ERR);
 
@@ -32,7 +32,7 @@ pub fn init() {
 
     File::create("./.attest/time_limit.txt").expect(CREATE_ERR);
 
-    println!("\x1b[32mFinished successfully\x1b[m");
+    println!("{}", Marker::plus("\x1b[32mFinished successfully\x1b[m"));
 }
 
 // Show settings
@@ -55,7 +55,7 @@ pub fn set_build(commands: Vec<String>) {
 
     set_item_toml("./attest.toml", "build", Value::Array(values));
 
-    println!("\x1b[32mFinished successfully\x1b[m");
+    println!("{}", Marker::plus("\x1b[32mFinished successfully\x1b[m"));
 }
 
 // Set the run command
@@ -67,7 +67,7 @@ pub fn set_run(commands: Vec<String>) {
 
     set_item_toml("./attest.toml", "run", Value::Array(values));
 
-    println!("\x1b[32mFinished successfully\x1b[m");
+    println!("{}", Marker::plus("\x1b[32mFinished successfully\x1b[m"));
 }
 
 // Set the test command
@@ -79,14 +79,14 @@ pub fn set_test(commands: Vec<String>) {
 
     set_item_toml("./attest.toml", "test", Value::Array(values));
 
-    println!("\x1b[32mFinished successfully\x1b[m");
+    println!("{}", Marker::plus("\x1b[32mFinished successfully\x1b[m"));
 }
 
 // Set the program file
 pub fn set_file(name: String) {
     set_item_toml("./attest.toml", "file_path", Value::String(name));
 
-    println!("\x1b[32mFinished successfully\x1b[m");
+    println!("{}", Marker::plus("\x1b[32mFinished successfully\x1b[m"));
 }
 
 pub async fn login(user_name: String, password: String) {
@@ -147,9 +147,9 @@ pub async fn login(user_name: String, password: String) {
 
         writeln!(&mut file, "REVEL_SESSION = {}", cookie_value).expect(WRITE_ERR);
 
-        println!("\x1b[32mFinished successfully\x1b[m");
+        println!("{}", Marker::plus("\x1b[32mFinished successfully\x1b[m"));
     } else {
-        panic!("\x1b[31mFailed to login\x1b[m");
+        println!("{}", Marker::minus("\x1b[31mFailed to login\x1b[m"));
     }
 }
 
@@ -168,7 +168,7 @@ pub async fn lang(
     search: Option<String>,
 ) -> Result<()> {
     if lang.is_none() && !list && search.is_none() {
-        panic!("The lang command must have arguments");
+        panic!("{} The lang command must have arguments", Marker::Minus);
     }
 
     let client: Client = make_client();
@@ -230,12 +230,12 @@ pub async fn lang(
         let lang_code: &str = &langs
             .iter()
             .find(|&v: &&(String, String)| v.0 == lang_name)
-            .expect("The lang cannot be used")
+            .unwrap_or_else(|| panic!("{}", Marker::minus("The lang cannot be used")))
             .1;
         set_item_toml("./attest.toml", "lang", Value::String(lang_code.to_owned()));
-        println!("\x1b[32mFinished successfully\x1b[m");
+        println!("{}", Marker::plus("\x1b[32mFinished successfully\x1b[m"));
     } else {
-        panic!("Arguments may be wrong format");
+        panic!("{}", Marker::minus("Arguments may be wrong format"));
     }
 
     Ok(())

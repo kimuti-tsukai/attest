@@ -10,8 +10,8 @@ use std::process::{Command as StdCommand, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::utils::{
-    file_read_to_string, items_toml, link_from_copy, make_client, request, to_html, CREATE_ERR,
-    WRITE_ERR,
+    file_read_to_string, items_toml, link_from_copy, make_client, request, to_html, Marker,
+    CREATE_ERR, WRITE_ERR,
 };
 
 use anyhow::{bail, Context, Result};
@@ -32,26 +32,7 @@ use scraper::{Html, Selector};
 
 use regex::Regex;
 
-#[derive(Clone, Copy, Hash, Debug)]
-enum Marker {
-    Plus,
-    Minus,
-    X,
-}
-
-impl std::fmt::Display for Marker {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Marker::Plus => "\x1b[32m[+]\x1b[m",
-                Marker::Minus => "\x1b[31m[-]\x1b[m",
-                Marker::X => "\x1b[35m[x]\x1b[m",
-            }
-        )
-    }
-}
+use proconio_derive::fastout;
 
 impl From<Res> for Marker {
     fn from(value: Res) -> Self {
@@ -201,10 +182,12 @@ fn get_time_limit(html: &Html) -> u128 {
 
 // Check if the code is same
 fn is_same_code(setting_toml: &Map<String, Value>) -> Option<bool> {
-    let file_path: &str = setting_toml
-        .get("file_path")?
-        .as_str()
-        .expect(r#"the "file_path" value must be string"#);
+    let file_path: &str = setting_toml.get("file_path")?.as_str().unwrap_or_else(|| {
+        panic!(
+            "{}",
+            Marker::minus(r#"the "file_path" value must be string"#)
+        )
+    });
 
     if !Path::new(file_path).is_file() {
         return None;
@@ -262,11 +245,15 @@ fn build<T: AsRef<Path>>(setting_toml: &Map<String, Value>, dir: T) -> Option<Ou
 
         let build_commands: Vec<&str> = c
             .as_array()
-            .expect(r#""build" value must be array"#)
+            .unwrap_or_else(|| panic!("{}", Marker::minus(r#""build" value must be array"#)))
             .iter()
             .map(|v: &Value| {
-                v.as_str()
-                    .expect(r#"items of "build" value must be string"#)
+                v.as_str().unwrap_or_else(|| {
+                    panic!(
+                        "{}",
+                        Marker::minus(r#"items of "build" value must be string"#)
+                    )
+                })
             })
             .collect();
 
@@ -283,7 +270,12 @@ fn build<T: AsRef<Path>>(setting_toml: &Map<String, Value>, dir: T) -> Option<Ou
                 .args(args)
                 .current_dir(dir)
                 .output()
-                .expect("Something went wrong when building program"),
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "{}",
+                        Marker::minus("Something went wrong when building program")
+                    )
+                }),
         )
     } else {
         None
@@ -294,22 +286,24 @@ fn build_wrap<T: AsRef<Path>>(
     setting_toml: &Map<String, Value>,
     dir: T,
     results: &mut Vec<Option<Res>>,
-) -> Result<(), ()> {
+) -> Result<String> {
+    let mut buf = String::new();
     if let Some(output) = build(setting_toml, dir) {
         if output.status.code().unwrap() != 0 {
-            println!("{} \x1b[33mCE\x1b[m\n", Marker::Minus);
-            println!(
+            writeln!(buf, "{} \x1b[33mCE\x1b[m\n", Marker::Minus)?;
+            writeln!(
+                buf,
                 "{} stderr:\n{}",
                 Marker::X,
                 std::str::from_utf8(&output.stderr).unwrap()
-            );
+            )?;
             results.push(Some(Res::CE));
 
-            return Err(());
+            bail!("");
         }
     }
 
-    Ok(())
+    Ok(buf)
 }
 
 fn get_string_list(key: &str, toml: &Map<String, Value>) -> Option<Vec<String>> {
@@ -328,13 +322,19 @@ fn get_string_list(key: &str, toml: &Map<String, Value>) -> Option<Vec<String>> 
 }
 
 fn get_commands(setting_toml: &Map<String, Value>) -> Vec<String> {
-    get_string_list("run", setting_toml).expect(r#""attest.toml" must have "run" value"#)
+    get_string_list("run", setting_toml).unwrap_or_else(|| {
+        panic!(
+            "{}",
+            Marker::minus(r#""attest.toml" must have "run" value"#)
+        )
+    })
 }
 
 fn get_test_command(setting_toml: &Map<String, Value>) -> Option<Vec<String>> {
     get_string_list("test", setting_toml)
 }
 
+#[fastout]
 async fn tester(
     examples: &[IO],
     setting_toml: &Map<String, Value>,
@@ -345,15 +345,19 @@ async fn tester(
 
     let mut results: Vec<Option<Res>> = Vec::new();
 
-    if build_wrap(setting_toml, &dir, &mut results).is_err() {
-        return None;
+    match build_wrap(setting_toml, &dir, &mut results) {
+        Ok(s) => println!("{}", s),
+        Err(e) => {
+            eprintln!("{}", e);
+            return None;
+        }
     }
 
     let commands: Vec<String> = get_commands(setting_toml);
 
     let execute_command: String = commands
         .first()
-        .expect(r#""command" value is not satisfied"#)
+        .unwrap_or_else(|| panic!("{}", Marker::minus(r#""command" value is not satisfied"#)))
         .to_owned();
 
     let args: Vec<String> = if commands.len() > 1 {
@@ -401,10 +405,7 @@ async fn tester(
 
                         writeln!(buf, "{} time: {}", Marker::X, time)?;
 
-                        return Result::<(Res, String)>::Ok((
-                            Res::TLE,
-                            buf,
-                        ));
+                        return Result::<(Res, String)>::Ok((Res::TLE, buf));
                     }
                 };
 

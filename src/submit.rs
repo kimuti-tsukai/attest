@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::utils::{
     file_read_to_string, get_item_toml, lang_select, link_from_copy, make_client, request, to_html,
+    Marker,
 };
 
 use reqwest::Client;
@@ -31,7 +32,7 @@ pub async fn submit(url: Option<String>, lang: Option<String>) {
     let task_screen_name: &str = html
         .select(&task_screen_name_selrctor)
         .next()
-        .expect("You may not login")
+        .unwrap_or_else(|| panic!("{}", Marker::minus("You may not login")))
         .attr("value")
         .unwrap();
 
@@ -50,7 +51,7 @@ pub async fn submit(url: Option<String>, lang: Option<String>) {
 
     let lang_code: String = match lang {
         None => get_item_toml("./attest.toml", "lang")
-            .expect("You have to set lang")
+            .unwrap_or_else(|| panic!("{}", Marker::minus("You have to set lang")))
             .as_str()
             .unwrap()
             .to_owned(),
@@ -64,7 +65,7 @@ pub async fn submit(url: Option<String>, lang: Option<String>) {
             let lang_code: &str = &langs
                 .iter()
                 .find(|&v: &&(String, String)| v.0 == lang_name)
-                .expect("The lang cannot be used")
+                .unwrap_or_else(|| panic!("{}", Marker::minus("The lang cannot be used")))
                 .1;
 
             lang_code.to_owned()
@@ -73,8 +74,8 @@ pub async fn submit(url: Option<String>, lang: Option<String>) {
 
     form.insert("data.LanguageId", &lang_code);
 
-    let file_path_string: Value =
-        get_item_toml("./attest.toml", "file_path").expect("You have to set file path");
+    let file_path_string: Value = get_item_toml("./attest.toml", "file_path")
+        .unwrap_or_else(|| panic!("{}", Marker::minus("You have to set file path")));
 
     let file_path: &str = file_path_string.as_str().unwrap();
 
@@ -95,4 +96,6 @@ pub async fn submit(url: Option<String>, lang: Option<String>) {
     let addr: String = String::from("https://atcoder.jp") + require_addr;
 
     client.post(&addr).form(&form).send().await.unwrap();
+
+    println!("{}", Marker::plus("\x1b[32mFinished successfully\x1b[m"));
 }

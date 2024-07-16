@@ -107,6 +107,7 @@ dependencies = [
  "anyhow",
  "clap",
  "dirs",
+ "proconio-derive",
  "regex",
  "reqwest",
  "rustc-hash",
@@ -1093,6 +1094,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e719e8df665df0d1c8fbfd238015744736151d4445ec0836b8e628aae103b77"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "proconio-derive"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bccfa078f1a3db6563793531989799a2201d9bdf609f48dd82620b443fbcd409"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
