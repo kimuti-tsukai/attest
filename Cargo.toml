@@ -15,5 +15,5 @@ rustc-hash = "2.0.0"
 scraper = "0.19.0"
 serde = { version = "1.0.198", features = ["derive"] }
 serde_json = "1.0.116"
-tokio = { version = "1.37.0", features = ["full"] }
+tokio = { version = "1.37.0", features = ["macros","process","rt-multi-thread","time"] }
 toml = "0.8.12"
