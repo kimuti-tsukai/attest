@@ -492,7 +492,7 @@ async fn spawn_command<T: AsRef<Path>>(
     Ok(child.wait_with_output())
 }
 
-async fn spawn_test_command<T: AsRef<Path>>(
+async fn custom_judge<T: AsRef<Path>>(
     test_command: &Option<Vec<String>>,
     result: &str,
     io: &IO,
@@ -565,7 +565,7 @@ async fn check<T: AsRef<Path>>(
     let return_value: Res = if output.status.code() == Some(0) {
         let (condition, discription): (bool, Option<String>) =
             if test_command.is_some() && !test_command.as_ref().unwrap().is_empty() {
-                spawn_test_command(test_command, result, io, dir).await?
+                custom_judge(test_command, result, io, dir).await?
             } else {
                 (result == io.output, None)
             };
