@@ -1,4 +1,5 @@
 use std::env::current_dir;
+use std::fmt::Write as _;
 use std::fs::File;
 use std::future::Future;
 use std::hash::{Hash, Hasher};
@@ -13,7 +14,7 @@ use crate::utils::{
     WRITE_ERR,
 };
 
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 
 use reqwest::Client;
 
@@ -249,7 +250,7 @@ fn is_same_setting(setting_toml: &Map<String, Value>) -> Result<bool> {
     }
 }
 
-fn build(setting_toml: &Map<String, Value>, dir: &PathBuf) -> Option<Output> {
+fn build<T: AsRef<Path>>(setting_toml: &Map<String, Value>, dir: T) -> Option<Output> {
     if let (Some(c), Some(code), Ok(setting)) = (
         setting_toml.get("build"),
         is_same_code(setting_toml),
@@ -289,9 +290,9 @@ fn build(setting_toml: &Map<String, Value>, dir: &PathBuf) -> Option<Output> {
     }
 }
 
-fn build_wrap(
+fn build_wrap<T: AsRef<Path>>(
     setting_toml: &Map<String, Value>,
-    dir: &PathBuf,
+    dir: T,
     results: &mut Vec<Option<Res>>,
 ) -> Result<(), ()> {
     if let Some(output) = build(setting_toml, dir) {
@@ -311,35 +312,27 @@ fn build_wrap(
     Ok(())
 }
 
-fn get_commands(setting_toml: &Map<String, Value>) -> Vec<String> {
-    setting_toml
-        .get("run")
-        .expect(r#""test.toml" must have "run" value"#)
-        .as_array()
-        .expect(r#""run" value must be array"#)
-        .iter()
-        .map(|v: &Value| {
-            v.as_str()
-                .expect(r#"items of "run" value must be string"#)
-                .to_string()
-        })
-        .collect()
-}
-
-fn get_test_command(setting_toml: &Map<String, Value>) -> Option<Vec<String>> {
+fn get_string_list(key: &str, toml: &Map<String, Value>) -> Option<Vec<String>> {
     Some(
-        setting_toml
-            .get("test")?
+        toml.get(key)?
             .as_array()
-            .expect(r#""test" value must be array"#)
+            .unwrap_or_else(|| panic!(r#""{}" value must be array"#, key))
             .iter()
             .map(|v: &Value| {
                 v.as_str()
-                    .expect(r#"items of "run" value must be string"#)
+                    .unwrap_or_else(|| panic!(r#"items of "{}" value must be string"#, key))
                     .to_string()
             })
             .collect(),
     )
+}
+
+fn get_commands(setting_toml: &Map<String, Value>) -> Vec<String> {
+    get_string_list("run", setting_toml).expect(r#""test.toml" must have "run" value"#)
+}
+
+fn get_test_command(setting_toml: &Map<String, Value>) -> Option<Vec<String>> {
+    get_string_list("test", setting_toml)
 }
 
 async fn tester(
@@ -350,7 +343,7 @@ async fn tester(
 ) -> Option<Vec<Option<Res>>> {
     let dir: PathBuf = current_dir().unwrap();
 
-    let mut results: Vec<Option<Res>> = vec![None; examples.len()];
+    let mut results: Vec<Option<Res>> = Vec::new();
 
     if build_wrap(setting_toml, &dir, &mut results).is_err() {
         return None;
@@ -358,66 +351,92 @@ async fn tester(
 
     let commands: Vec<String> = get_commands(setting_toml);
 
-    let execute_command: &str = commands
+    let execute_command: String = commands
         .first()
-        .expect(r#""command" value is not satisfied"#);
+        .expect(r#""command" value is not satisfied"#)
+        .to_owned();
 
-    let args: &[String] = if commands.len() > 1 {
-        &commands[1..]
+    let args: Vec<String> = if commands.len() > 1 {
+        commands[1..].to_vec()
     } else {
-        &[]
+        Vec::new()
     };
 
     let test_commands: Option<Vec<String>> = get_test_command(setting_toml);
 
+    let mut handles = Vec::new();
+
     for (index, io) in examples.iter().enumerate() {
         if !example_num.is_empty() && !example_num.contains(&(index + 1)) {
+            handles.push(None);
             continue;
         }
 
-        // let mut written = String::new();
-        // let mut buf = BufWriter::new(&mut written);
+        let io = io.clone();
+        let args = args.clone();
 
-        println!("{} \x1b[35mexample{}\x1b[m", Marker::X, index + 1);
+        let test_commands = test_commands.clone();
+        let dir = dir.clone();
+        let execute_command = execute_command.clone();
 
-        let output = spawn_command(&io.input, &dir, execute_command, args).await;
+        let f = async move {
+            let mut buf: String = String::new();
 
-        let start: Instant = Instant::now();
+            writeln!(buf, "{} \x1b[35mexample{}\x1b[m", Marker::X, index + 1)?;
 
-        let output: Output =
-            match time::timeout(Duration::from_millis(time_limit as u64), output).await {
-                Ok(v) => {
-                    if let Ok(v) = v {
-                        v
-                    } else {
-                        continue;
+            let output = spawn_command(&io.input, &dir, &execute_command, &args[..]).await?;
+
+            let start: Instant = Instant::now();
+
+            let output: Output =
+                match time::timeout(Duration::from_millis(time_limit as u64), output).await {
+                    Ok(v) => v?,
+                    Err(_) => {
+                        let time: u128 = start.elapsed().as_millis();
+
+                        writeln!(buf, "{} \x1b[33mTLE\x1b[m\n", Marker::Minus)?;
+
+                        writeln!(buf, "{} input:\n{}", Marker::X, io.input)?;
+                        writeln!(buf, "{} expect output:\n{}", Marker::X, io.output)?;
+
+                        writeln!(buf, "{} time: {}", Marker::X, time)?;
+
+                        return Result::<(Res, String)>::Ok((
+                            Res::TLE,
+                            buf,
+                        ));
                     }
-                }
-                Err(_) => {
-                    let time: u128 = start.elapsed().as_millis();
+                };
 
-                    println!("{} \x1b[33mTLE\x1b[m", Marker::Minus);
+            let time: u128 = start.elapsed().as_millis();
 
-                    println!();
+            Ok((
+                check(output, time, &io, &test_commands, &dir, &mut buf).await?,
+                buf,
+            ))
+        };
 
-                    println!("{} input:\n{}", Marker::X, io.input);
-                    println!("{} expect output:\n{}", Marker::X, io.output);
-
-                    println!("{} time: {}", Marker::X, time);
-
-                    results[index] = Some(Res::TLE);
-                    continue;
-                }
-            };
-
-        let time: u128 = start.elapsed().as_millis();
-
-        let test_result = check(output, time, io, &test_commands, &dir);
-
-        results[index] = Some(test_result.await);
+        handles.push(Some(tokio::spawn(f)))
     }
 
-    println!();
+    for op_handle in handles {
+        if let Some(handle) = op_handle {
+            match handle.await.unwrap() {
+                Ok((res, test_result)) => {
+                    results.push(Some(res));
+                    println!("{}", test_result);
+                }
+                Err(err) => {
+                    results.push(None);
+                    eprintln!("{} \x1b[32mError\x1b[m", Marker::Minus);
+                    eprintln!("{} Error message or detail", Marker::X);
+                    eprintln!("{}", err)
+                }
+            }
+        } else {
+            results.push(None);
+        }
+    }
 
     for (i, r) in results.iter().enumerate() {
         if let Some(r) = r {
@@ -449,39 +468,37 @@ pub enum Res {
     TLE,
 }
 
-async fn spawn_command(
+async fn spawn_command<T: AsRef<Path>>(
     input: &str,
-    dir: &PathBuf,
+    dir: T,
     execute_command: &str,
     args: &[String],
-) -> impl Future<Output = Result<Output, std::io::Error>> {
+) -> Result<impl Future<Output = Result<Output, std::io::Error>>> {
     let mut child: Child = Command::new(execute_command)
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .current_dir(dir)
-        .spawn()
-        .unwrap();
+        .spawn()?;
 
     child
         .stdin
         .as_mut()
         .unwrap()
         .write_all(input.as_bytes())
-        .await
-        .unwrap();
+        .await?;
 
-    child.wait_with_output()
+    Ok(child.wait_with_output())
 }
 
-async fn spawn_test_command(
+async fn spawn_test_command<T: AsRef<Path>>(
     test_command: &Option<Vec<String>>,
     result: &str,
     io: &IO,
-    dir: &PathBuf,
-) -> (bool, Option<String>) {
+    dir: T,
+) -> Result<(bool, Option<String>)> {
     let Some(command) = test_command.as_ref() else {
-        return (false, None);
+        return Ok((false, None));
     };
 
     let mut args = command[1..].to_vec();
@@ -491,21 +508,28 @@ async fn spawn_test_command(
     let test_output: Output = spawn_command(
         &format!("{}\n{}", result, &io.output),
         dir,
-        command.first().unwrap(),
+        command
+            .first()
+            .with_context(|| "The running command is not set")?,
         &args[..],
     )
-    .await
-    .await
-    .unwrap();
+    .await?
+    .await?;
 
     if test_output.status.code() != Some(0) {
-        eprintln!("{} The test command failed", Marker::Minus);
-        eprintln!("{} Error message", Marker::X);
-        eprintln!(
+        let mut error_message = String::new();
+        writeln!(
+            &mut error_message,
+            "{} The test command failed",
+            Marker::Minus
+        )?;
+        writeln!(&mut error_message, "{} Error message", Marker::X)?;
+        writeln!(
+            &mut error_message,
             "{}",
-            String::from_utf8(test_output.stderr).expect("The std err is not utf8")
-        );
-        panic!("The test command failed");
+            String::from_utf8(test_output.stderr)?
+        )?;
+        bail!(error_message)
     }
 
     let mut judge = std::str::from_utf8(&test_output.stdout)
@@ -514,74 +538,77 @@ async fn spawn_test_command(
 
     let judge_res = judge.next().unwrap_or("");
 
-    (
+    Ok((
         match judge_res {
             "true" => true,
             "false" => false,
-            _ => panic!(
+            _ => bail!(
                 "{} Output format is wrong. The first line of output must be \"true\" or \"false\"",
                 Marker::Minus
             ),
         },
         judge.next().map(|x| x.to_string()),
-    )
+    ))
 }
 
-async fn check(
+async fn check<T: AsRef<Path>>(
     output: Output,
     time: u128,
     io: &IO,
     test_command: &Option<Vec<String>>,
-    dir: &PathBuf,
-) -> Res {
+    dir: T,
+    buf: &mut String,
+) -> Result<Res> {
     let result: &str = std::str::from_utf8(&output.stdout).unwrap_or("");
 
     let return_value: Res = if output.status.code() == Some(0) {
         let (condition, discription): (bool, Option<String>) =
             if test_command.is_some() && !test_command.as_ref().unwrap().is_empty() {
-                spawn_test_command(test_command, result, io, dir).await
+                spawn_test_command(test_command, result, io, dir).await?
             } else {
                 (result == io.output, None)
             };
 
-        let print_discription = || {
+        let print_discription = |buf: &mut String| -> Result<()> {
             if let Some(d) = discription {
-                println!("{} discription:\n{}", Marker::X, d);
+                writeln!(buf, "{} discription:\n{}", Marker::X, d)?;
             }
+            Ok(())
         };
 
         if condition {
-            println!("{} \x1b[32mAC\x1b[m", Marker::Plus);
-            print_discription();
-            println!();
-            println!("{} input:\n{}", Marker::X, io.input);
+            writeln!(buf, "{} \x1b[32mAC\x1b[m", Marker::Plus)?;
+            print_discription(buf)?;
+            writeln!(buf)?;
+            writeln!(buf, "{} input:\n{}", Marker::X, io.input)?;
             Res::AC
         } else {
-            println!("{} \x1b[33mWA\x1b[m", Marker::Minus);
-            print_discription();
+            writeln!(buf, "{} \x1b[33mWA\x1b[m", Marker::Minus)?;
+            print_discription(buf)?;
 
-            println!();
+            writeln!(buf)?;
 
-            println!("{} input:\n{}", Marker::X, io.input);
-            println!("{} excepted output:\n{}", Marker::X, io.output);
+            writeln!(buf, "{} input:\n{}", Marker::X, io.input)?;
+            writeln!(buf, "{} excepted output:\n{}", Marker::X, io.output)?;
             Res::WA
         }
     } else {
-        println!("{} \x1b[33mRE\x1b[m", Marker::Minus);
-        println!("{} input:\n{}", Marker::X, io.input);
+        writeln!(buf, "{} \x1b[33mRE\x1b[m", Marker::Minus)?;
+        writeln!(buf, "{} input:\n{}", Marker::X, io.input)?;
         Res::RE
     };
 
-    println!("{} output:\n{}\n", Marker::X, result);
+    writeln!(buf, "{} output:\n{}\n", Marker::X, result)?;
 
-    println!(
+    writeln!(
+        buf,
         "{} stderr:\n{}",
         Marker::X,
-        std::str::from_utf8(&output.stderr).unwrap()
-    );
+        std::str::from_utf8(&output.stderr)?
+    )?;
 
-    println!("{} time: {}", Marker::X, time);
-    println!();
+    writeln!(buf, "{} time: {}", Marker::X, time)?;
+    writeln!(buf)?;
 
-    return_value
+    Ok(return_value)
 }
