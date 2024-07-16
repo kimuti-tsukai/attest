@@ -49,7 +49,7 @@ pub async fn submit(url: Option<String>, lang: Option<String>) {
     form.insert("csrf_token", csrf_token);
 
     let lang_code: String = match lang {
-        None => get_item_toml("./test.toml", "lang")
+        None => get_item_toml("./attest.toml", "lang")
             .expect("You have to set lang")
             .as_str()
             .unwrap()
@@ -74,7 +74,7 @@ pub async fn submit(url: Option<String>, lang: Option<String>) {
     form.insert("data.LanguageId", &lang_code);
 
     let file_path_string: Value =
-        get_item_toml("./test.toml", "file_path").expect("You have to set file path");
+        get_item_toml("./attest.toml", "file_path").expect("You have to set file path");
 
     let file_path: &str = file_path_string.as_str().unwrap();
 

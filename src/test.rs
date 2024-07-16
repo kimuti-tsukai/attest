@@ -97,7 +97,7 @@ pub async fn test(
 
         save_cache(&url, time_limit, &examples);
     }
-    let setting_toml: Map<String, Value> = items_toml("./test.toml");
+    let setting_toml: Map<String, Value> = items_toml("./attest.toml");
 
     let results: Option<Vec<Option<Res>>> =
         tester(&examples, &setting_toml, time_limit, example_num).await;
@@ -328,7 +328,7 @@ fn get_string_list(key: &str, toml: &Map<String, Value>) -> Option<Vec<String>> 
 }
 
 fn get_commands(setting_toml: &Map<String, Value>) -> Vec<String> {
-    get_string_list("run", setting_toml).expect(r#""test.toml" must have "run" value"#)
+    get_string_list("run", setting_toml).expect(r#""attest.toml" must have "run" value"#)
 }
 
 fn get_test_command(setting_toml: &Map<String, Value>) -> Option<Vec<String>> {

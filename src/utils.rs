@@ -61,7 +61,7 @@ pub fn set_item_toml<T: AsRef<Path>>(path: T, key: &str, value: Value) {
 
     let mut setting_toml: Map<String, Value> = setting
         .parse::<Table>()
-        .expect(r#""test.toml" has wrong format"#);
+        .expect(r#""attest.toml" has wrong format"#);
 
     setting_toml.insert(String::from(key), value);
 

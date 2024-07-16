@@ -18,7 +18,7 @@ use crate::utils::{
 
 // Initialize
 pub fn init() {
-    File::create("./test.toml").expect("something went wrong creating a file");
+    File::create("./attest.toml").expect("something went wrong creating a file");
 
     create_dir_all("./.attest").expect(CREATE_ERR);
 
@@ -38,7 +38,7 @@ pub fn init() {
 // Show settings
 pub fn show_set() {
     let mut r: String = String::new();
-    File::open("./test.toml")
+    File::open("./attest.toml")
         .expect(OPEN_ERR)
         .read_to_string(&mut r)
         .expect(READ_ERR);
@@ -53,7 +53,7 @@ pub fn set_build(commands: Vec<String>) {
         .map(|v: &String| Value::String(v.clone()))
         .collect();
 
-    set_item_toml("./test.toml", "build", Value::Array(values));
+    set_item_toml("./attest.toml", "build", Value::Array(values));
 
     println!("\x1b[32mFinished successfully\x1b[m");
 }
@@ -65,7 +65,7 @@ pub fn set_run(commands: Vec<String>) {
         .map(|v: &String| Value::String(v.clone()))
         .collect();
 
-    set_item_toml("./test.toml", "run", Value::Array(values));
+    set_item_toml("./attest.toml", "run", Value::Array(values));
 
     println!("\x1b[32mFinished successfully\x1b[m");
 }
@@ -77,14 +77,14 @@ pub fn set_test(commands: Vec<String>) {
         .map(|v: &String| Value::String(v.clone()))
         .collect();
 
-    set_item_toml("./test.toml", "test", Value::Array(values));
+    set_item_toml("./attest.toml", "test", Value::Array(values));
 
     println!("\x1b[32mFinished successfully\x1b[m");
 }
 
 // Set the program file
 pub fn set_file(name: String) {
-    set_item_toml("./test.toml", "file_path", Value::String(name));
+    set_item_toml("./attest.toml", "file_path", Value::String(name));
 
     println!("\x1b[32mFinished successfully\x1b[m");
 }
@@ -232,7 +232,7 @@ pub async fn lang(
             .find(|&v: &&(String, String)| v.0 == lang_name)
             .expect("The lang cannot be used")
             .1;
-        set_item_toml("./test.toml", "lang", Value::String(lang_code.to_owned()));
+        set_item_toml("./attest.toml", "lang", Value::String(lang_code.to_owned()));
         println!("\x1b[32mFinished successfully\x1b[m");
     } else {
         panic!("Arguments may be wrong format");
