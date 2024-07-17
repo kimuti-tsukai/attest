@@ -527,6 +527,7 @@ async fn spawn_command<T: AsRef<Path>>(
     args: &[String],
 ) -> Result<impl Future<Output = Result<Output, std::io::Error>>> {
     let mut child: Child = Command::new(execute_command)
+        .kill_on_drop(true)
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
