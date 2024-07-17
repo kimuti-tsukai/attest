@@ -233,11 +233,7 @@ pub async fn lang(
         }
     };
 
-    if list {
-        for (lang, _) in &langs {
-            println!("{}", lang);
-        }
-    } else if let Some(lang_name) = search {
+    if let Some(lang_name) = search {
         for (lang, _) in &langs {
             if lang
                 .to_ascii_lowercase()
@@ -245,6 +241,10 @@ pub async fn lang(
             {
                 println!("{}", lang);
             }
+        }
+    } else if list {
+        for (lang, _) in &langs {
+            println!("{}", lang);
         }
     } else if let Some(lang_name) = lang {
         let lang_code: &str = &langs
