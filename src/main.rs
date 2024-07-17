@@ -21,6 +21,9 @@ enum Arg {
         #[arg(help = "URL of AtCoder")]
         url: Option<String>,
 
+        #[clap(short = 'b', long = "build")]
+        build: bool,
+
         #[clap(short = 'n',long = "num",num_args = 0..,value_delimiter = ' ')]
         example_num: Vec<usize>,
     },
@@ -36,6 +39,9 @@ enum Arg {
     #[clap(visible_alias("ts"))]
     Tebmit {
         url: Option<String>,
+
+        #[clap(short = 'b', long = "build")]
+        build: bool,
 
         #[clap(short = 'l', long = "lang")]
         lang: Option<String>,
@@ -61,6 +67,7 @@ enum Arg {
         #[command(subcommand)]
         command: Option<Sets>,
     },
+    /// Login to AtCoder
     Login {
         #[arg()]
         user_name: String,
@@ -68,6 +75,7 @@ enum Arg {
         #[arg()]
         password: String,
     },
+    /// Logout from AtCoder
     Logout,
 }
 
@@ -110,6 +118,13 @@ Input:
     },
     /// Set the program file
     File { file_path: String },
+    /// Set other files that building depends on
+    Deps {
+        #[clap(short = 'a', long = "add")]
+        add: bool,
+        #[clap(value_delimiter = ' ')]
+        paths: Vec<String>,
+    }
 }
 
 #[tokio::main]
@@ -117,14 +132,14 @@ async fn main() -> Result<()> {
     let args: Arg = Arg::parse();
 
     match args {
-        Arg::Test { url, example_num } => {
-            test(url, example_num).await?;
+        Arg::Test { url, example_num, build } => {
+            test(url, example_num, build).await?;
         }
         Arg::Submit { url, lang } => {
             submit(url, lang).await;
         }
-        Arg::Tebmit { url, lang } => {
-            let results: Option<Vec<Option<Res>>> = test(url.clone(), Vec::new()).await?;
+        Arg::Tebmit { url, lang, build } => {
+            let results: Option<Vec<Option<Res>>> = test(url.clone(), Vec::new(), build).await?;
 
             if let Some(v) = results {
                 if v.iter().all(|&a: &Option<Res>| a == Some(Res::AC)) {
@@ -146,6 +161,7 @@ async fn main() -> Result<()> {
                     Sets::Run { command } => subcommands::set_run(command),
                     Sets::Test { command } => subcommands::set_test(command),
                     Sets::File { file_path } => subcommands::set_file(file_path),
+                    Sets::Deps { paths, add } => subcommands::set_deps_file(paths, add),
                 }
             } else {
                 subcommands::show_set();

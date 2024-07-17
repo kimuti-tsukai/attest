@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::env::current_dir;
 use std::fmt::Write as _;
-use std::fs::File;
+use std::fs::{self, File};
 use std::future::Future;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
@@ -10,8 +11,8 @@ use std::process::{Command as StdCommand, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::utils::{
-    file_read_to_string, items_toml, link_from_copy, make_client, request, to_html, Marker,
-    CREATE_ERR, WRITE_ERR,
+    file_read_to_string, items_toml, link_from_copy, make_client, request, to_html,
+    Marker, CREATE_ERR, WRITE_ERR,
 };
 
 use anyhow::{bail, Context, Result};
@@ -56,6 +57,7 @@ impl From<&Res> for Marker {
 pub async fn test(
     url: Option<String>,
     example_num: Vec<usize>,
+    p_build: bool,
 ) -> Result<Option<Vec<Option<Res>>>> {
     let (examples, time_limit): (Vec<IO>, u128);
 
@@ -81,7 +83,7 @@ pub async fn test(
     let setting_toml: Map<String, Value> = items_toml("./attest.toml");
 
     let results: Option<Vec<Option<Res>>> =
-        tester(&examples, &setting_toml, time_limit, example_num).await;
+        tester(&examples, &setting_toml, time_limit, example_num, p_build).await;
 
     Ok(results)
 }
@@ -220,6 +222,60 @@ fn is_same_code(setting_toml: &Map<String, Value>) -> Option<bool> {
     }
 }
 
+fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
+    let Some(file_paths) = setting_toml.get("deps_files") else {
+        return true;
+    };
+
+    let files = if let Some(l) = file_paths.as_array() {
+        l.iter()
+        .map(|v| {
+            v.as_str().unwrap_or_else(|| {
+                panic!(
+                    "{} The values of deps_files array have to be str",
+                    Marker::Minus
+                )
+            })
+        })
+    } else {
+        eprintln!("{} The deps_files value has to be array", Marker::Minus);
+        return true;
+    };
+
+    let file_hashes = files.map(|p| {
+        let f = file_read_to_string(p);
+        let mut hasher = FxHasher::default();
+        f.hash(&mut hasher);
+        (p,hasher.finish())
+    });
+
+    let caches_t: String = fs::read_to_string("./.attest/deps_caches.json").unwrap_or("{}".to_string());
+
+    let mut caches: HashMap<&str,u64> = serde_json::from_str(&caches_t).unwrap_or_default();
+
+    let mut new_cache: HashMap<&str,u64> = HashMap::new();
+
+    let mut is_same = true;
+
+    for (key,hash) in file_hashes {
+        if !caches.get(&key).is_some_and(|v| *v == hash) {
+            is_same = false;
+        }
+        caches.remove(&key);
+        new_cache.insert(key,hash);
+    }
+
+    is_same = is_same && caches.is_empty();
+
+    if !is_same {
+        let mut f = File::create("./.attest/deps_caches.json").expect(CREATE_ERR);
+        let s = serde_json::to_string(&new_cache).unwrap();
+        write!(f,"{}",s).expect(WRITE_ERR);
+    }
+
+    is_same
+}
+
 fn is_same_setting(setting_toml: &Map<String, Value>) -> Result<bool> {
     let before_settiing: Map<String, Value> = items_toml("./.attest/cache.toml");
 
@@ -233,13 +289,9 @@ fn is_same_setting(setting_toml: &Map<String, Value>) -> Result<bool> {
     }
 }
 
-fn build<T: AsRef<Path>>(setting_toml: &Map<String, Value>, dir: T) -> Option<Output> {
-    if let (Some(c), Some(code), Ok(setting)) = (
-        setting_toml.get("build"),
-        is_same_code(setting_toml),
-        is_same_setting(setting_toml),
-    ) {
-        if code && setting {
+fn build<T: AsRef<Path>>(setting_toml: &Map<String, Value>, dir: T, p_build: bool) -> Option<Output> {
+    if let Some(c) = setting_toml.get("build") {
+        if !p_build && is_same_code(setting_toml).unwrap_or(true) && is_same_setting(setting_toml).unwrap_or(true) && is_sama_other_files(setting_toml) {
             return None;
         }
 
@@ -286,24 +338,25 @@ fn build_wrap<T: AsRef<Path>>(
     setting_toml: &Map<String, Value>,
     dir: T,
     results: &mut Vec<Option<Res>>,
-) -> Result<String> {
+    p_build: bool,
+) -> Result<(), String> {
     let mut buf = String::new();
-    if let Some(output) = build(setting_toml, dir) {
+    if let Some(output) = build(setting_toml, dir, p_build) {
         if output.status.code().unwrap() != 0 {
-            writeln!(buf, "{} \x1b[33mCE\x1b[m\n", Marker::Minus)?;
+            writeln!(buf, "{} \x1b[33mCE\x1b[m\n", Marker::Minus).unwrap();
             writeln!(
                 buf,
                 "{} stderr:\n{}",
                 Marker::X,
                 std::str::from_utf8(&output.stderr).unwrap()
-            )?;
+            ).unwrap();
             results.push(Some(Res::CE));
 
-            bail!("");
+            return Err(buf);
         }
     }
 
-    Ok(buf)
+    Ok(())
 }
 
 fn get_string_list(key: &str, toml: &Map<String, Value>) -> Option<Vec<String>> {
@@ -340,17 +393,15 @@ async fn tester(
     setting_toml: &Map<String, Value>,
     time_limit: u128,
     example_num: Vec<usize>,
+    p_build: bool,
 ) -> Option<Vec<Option<Res>>> {
     let dir: PathBuf = current_dir().unwrap();
 
     let mut results: Vec<Option<Res>> = Vec::new();
 
-    match build_wrap(setting_toml, &dir, &mut results) {
-        Ok(s) => println!("{}", s),
-        Err(e) => {
-            eprintln!("{}", e);
-            return None;
-        }
+    if let Err(e) = build_wrap(setting_toml, &dir, &mut results, p_build) {
+        println!("{}", e);
+        return None;
     }
 
     let commands: Vec<String> = get_commands(setting_toml);
