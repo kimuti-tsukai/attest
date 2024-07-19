@@ -175,7 +175,7 @@ fn get_time_limit(html: &Html) -> u128 {
         re2.captures(t)
             .unwrap()
             .get(1)
-            .unwrap()
+            .unwrap_or_else(|| panic!("{} Please input the question page.", Marker::Minus))
             .as_str()
             .parse::<u128>()
             .unwrap()
