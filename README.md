@@ -3,7 +3,6 @@
 ## Test and Submit your code for AtCoder
 
 ## Test
-You can test the examples by following below.
 ```bash
 attest [test | t] <URL>
 ```
@@ -20,7 +19,6 @@ attest [test | t] <URL> [-n | --num] <Num1> <Num2> ...
 You make Attest build the program with `-b` or `--build` option.
 
 ## Lang Selecting
-You can select language by following below.
 ```bash
 attest lang <LANG>
 ```
@@ -32,8 +30,9 @@ attest lang [-l | --list]
 
 You can find the language by following below.
 ```bash
-attest 
+attest lang -s <LANG>
 ```
+You can use partial matching.
 
 You can manage outputs to the certain contest with `[-u | --url] <URL>` option.
 
@@ -41,4 +40,15 @@ You can manage outputs to the certain contest with `[-u | --url] <URL>` option.
 You can submit your code by following below.
 ```bash
 attest [submit | s] <URL>
+```
+
+Please select language before submitting.
+Or, you can select language when you submit by following below.
+```bash
+attest [submit | s] <URL> [-l | --lang] <LANG>
+```
+
+## Setting
+```bash
+attest set <SUBCOMMAND> <VALUE>
 ```
