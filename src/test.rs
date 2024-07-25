@@ -35,24 +35,6 @@ use regex::Regex;
 
 use proconio_derive::fastout;
 
-impl From<Res> for Marker {
-    fn from(value: Res) -> Self {
-        match value {
-            Res::AC => Marker::Plus,
-            _ => Marker::Minus,
-        }
-    }
-}
-
-impl From<&Res> for Marker {
-    fn from(value: &Res) -> Self {
-        match value {
-            Res::AC => Marker::Plus,
-            _ => Marker::Minus,
-        }
-    }
-}
-
 // Function to test
 pub async fn test(
     url: Option<String>,
@@ -229,7 +211,7 @@ fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
 
     let files = if let Some(l) = file_paths.as_array() {
         l.iter()
-        .map(|v| {
+        .map(|v: &Value| {
             v.as_str().unwrap_or_else(|| {
                 panic!(
                     "{} The values of deps_files array have to be str",
@@ -242,9 +224,9 @@ fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
         return true;
     };
 
-    let file_hashes = files.map(|p| {
-        let f = file_read_to_string(p);
-        let mut hasher = FxHasher::default();
+    let file_hashes = files.map(|p: &str| {
+        let f: String = file_read_to_string(p);
+        let mut hasher: FxHasher = FxHasher::default();
         f.hash(&mut hasher);
         (p,hasher.finish())
     });
@@ -255,10 +237,10 @@ fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
 
     let mut new_cache: HashMap<&str,u64> = HashMap::new();
 
-    let mut is_same = true;
+    let mut is_same: bool = true;
 
     for (key,hash) in file_hashes {
-        if !caches.get(&key).is_some_and(|v| *v == hash) {
+        if !caches.get(&key).is_some_and(|v: &u64| *v == hash) {
             is_same = false;
         }
         caches.remove(&key);
@@ -268,8 +250,8 @@ fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
     is_same = is_same && caches.is_empty();
 
     if !is_same {
-        let mut f = File::create("./.attest/deps_caches.json").expect(CREATE_ERR);
-        let s = serde_json::to_string(&new_cache).unwrap();
+        let mut f: File = File::create("./.attest/deps_caches.json").expect(CREATE_ERR);
+        let s: String = serde_json::to_string(&new_cache).unwrap();
         write!(f,"{}",s).expect(WRITE_ERR);
     }
 
@@ -340,7 +322,7 @@ fn build_wrap<T: AsRef<Path>>(
     results: &mut Vec<Option<Res>>,
     p_build: bool,
 ) -> Result<(), String> {
-    let mut buf = String::new();
+    let mut buf: String = String::new();
     if let Some(output) = build(setting_toml, dir, p_build) {
         if output.status.code().unwrap() != 0 {
             writeln!(buf, "{} \x1b[33mCE\x1b[m\n", Marker::Minus).unwrap();
@@ -427,12 +409,12 @@ async fn tester(
             continue;
         }
 
-        let io = io.clone();
-        let args = args.clone();
+        let io: IO = io.clone();
+        let args: Vec<String> = args.clone();
 
-        let test_commands = test_commands.clone();
-        let dir = dir.clone();
-        let execute_command = execute_command.clone();
+        let test_commands: Option<Vec<String>> = test_commands.clone();
+        let dir: PathBuf = dir.clone();
+        let execute_command: String = execute_command.clone();
 
         let f = async move {
             let mut buf: String = String::new();

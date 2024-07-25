@@ -1,7 +1,3 @@
 /target
 /.idea
-/test_env
-/test_env/.attest
-/test_env/.attest_global
-/test_env/attest.toml
 /.DS_Store

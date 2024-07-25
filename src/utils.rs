@@ -12,6 +12,7 @@ use reqwest::{Client, Response, Url};
 use scraper::html::Select;
 use scraper::{ElementRef, Html, Selector};
 use toml::{map::Map, Table, Value};
+use crate::test::Res;
 
 pub const OPEN_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong opening a file";
 pub const READ_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong reading a file";
@@ -144,4 +145,22 @@ impl Marker {
     // pub fn x<T: std::fmt::Display>(value: T) -> String {
     //     format!("{} {}", Marker::X, value)
     // }
+}
+
+impl From<Res> for Marker {
+    fn from(value: Res) -> Self {
+        match value {
+            Res::AC => Marker::Plus,
+            _ => Marker::Minus,
+        }
+    }
+}
+
+impl From<&Res> for Marker {
+    fn from(value: &Res) -> Self {
+        match value {
+            Res::AC => Marker::Plus,
+            _ => Marker::Minus,
+        }
+    }
 }
