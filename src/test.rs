@@ -11,8 +11,8 @@ use std::process::{Command as StdCommand, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::utils::{
-    file_read_to_string, items_toml, link_from_copy, make_client, request, to_html,
-    Marker, CREATE_ERR, WRITE_ERR,
+    file_read_to_string, items_toml, link_from_copy, make_client, request, to_html, Marker,
+    CREATE_ERR, WRITE_ERR,
 };
 
 use anyhow::{bail, Context, Result};
@@ -210,8 +210,7 @@ fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
     };
 
     let files = if let Some(l) = file_paths.as_array() {
-        l.iter()
-        .map(|v: &Value| {
+        l.iter().map(|v: &Value| {
             v.as_str().unwrap_or_else(|| {
                 panic!(
                     "{} The values of deps_files array have to be str",
@@ -228,23 +227,24 @@ fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
         let f: String = file_read_to_string(p);
         let mut hasher: FxHasher = FxHasher::default();
         f.hash(&mut hasher);
-        (p,hasher.finish())
+        (p, hasher.finish())
     });
 
-    let caches_t: String = fs::read_to_string("./.attest/deps_caches.json").unwrap_or("{}".to_string());
+    let caches_t: String =
+        fs::read_to_string("./.attest/deps_caches.json").unwrap_or("{}".to_string());
 
-    let mut caches: HashMap<&str,u64> = serde_json::from_str(&caches_t).unwrap_or_default();
+    let mut caches: HashMap<&str, u64> = serde_json::from_str(&caches_t).unwrap_or_default();
 
-    let mut new_cache: HashMap<&str,u64> = HashMap::new();
+    let mut new_cache: HashMap<&str, u64> = HashMap::new();
 
     let mut is_same: bool = true;
 
-    for (key,hash) in file_hashes {
+    for (key, hash) in file_hashes {
         if !caches.get(&key).is_some_and(|v: &u64| *v == hash) {
             is_same = false;
         }
         caches.remove(&key);
-        new_cache.insert(key,hash);
+        new_cache.insert(key, hash);
     }
 
     is_same = is_same && caches.is_empty();
@@ -252,7 +252,7 @@ fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
     if !is_same {
         let mut f: File = File::create("./.attest/deps_caches.json").expect(CREATE_ERR);
         let s: String = serde_json::to_string(&new_cache).unwrap();
-        write!(f,"{}",s).expect(WRITE_ERR);
+        write!(f, "{}", s).expect(WRITE_ERR);
     }
 
     is_same
@@ -271,9 +271,17 @@ fn is_same_setting(setting_toml: &Map<String, Value>) -> Result<bool> {
     }
 }
 
-fn build<T: AsRef<Path>>(setting_toml: &Map<String, Value>, dir: T, p_build: bool) -> Option<Output> {
+fn build<T: AsRef<Path>>(
+    setting_toml: &Map<String, Value>,
+    dir: T,
+    p_build: bool,
+) -> Option<Output> {
     if let Some(c) = setting_toml.get("build") {
-        if !p_build && is_same_code(setting_toml).unwrap_or(true) && is_same_setting(setting_toml).unwrap_or(true) && is_sama_other_files(setting_toml) {
+        if !p_build
+            && is_same_code(setting_toml).unwrap_or(true)
+            && is_same_setting(setting_toml).unwrap_or(true)
+            && is_sama_other_files(setting_toml)
+        {
             return None;
         }
 
@@ -331,7 +339,8 @@ fn build_wrap<T: AsRef<Path>>(
                 "{} stderr:\n{}",
                 Marker::X,
                 std::str::from_utf8(&output.stderr).unwrap()
-            ).unwrap();
+            )
+            .unwrap();
             results.push(Some(Res::CE));
 
             return Err(buf);
@@ -513,6 +522,7 @@ async fn spawn_command<T: AsRef<Path>>(
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .current_dir(dir)
         .spawn()?;
 
