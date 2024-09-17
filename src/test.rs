@@ -1,14 +1,16 @@
-use std::collections::HashMap;
-use std::env::current_dir;
-use std::fmt::Write as _;
-use std::fs::{self, File};
-use std::future::Future;
-use std::hash::{Hash, Hasher};
-use std::io::Write;
-use std::num::IntErrorKind;
-use std::path::{Path, PathBuf};
-use std::process::{Command as StdCommand, Output, Stdio};
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    env::current_dir,
+    fmt::Write as _,
+    fs::{self, File},
+    future::Future,
+    hash::{Hash, Hasher},
+    io::Write,
+    num::IntErrorKind,
+    path::{Path, PathBuf},
+    process::{Command as StdCommand, Output, Stdio},
+    time::{Duration, Instant},
+};
 
 use crate::utils::{
     file_read_to_string, items_toml, link_from_copy, make_client, request, to_html, Marker,
@@ -21,9 +23,11 @@ use reqwest::Client;
 
 use rustc_hash::FxHasher;
 
-use tokio::io::AsyncWriteExt;
-use tokio::process::{Child, Command};
-use tokio::time;
+use tokio::{
+    io::AsyncWriteExt,
+    process::{Child, Command},
+    time,
+};
 
 use toml::{map::Map, Value};
 

@@ -12,7 +12,8 @@ use scraper::{ElementRef, Html, Selector};
 use toml::Value;
 
 use crate::utils::{
-    get_item_toml, lang_select, make_client, request, set_item_toml, to_html, Marker, CREATE_ERR, OPEN_ERR, READ_ERR, WRITE_ERR
+    get_item_toml, lang_select, make_client, request, set_item_toml, to_html, Marker, CREATE_ERR,
+    OPEN_ERR, READ_ERR, WRITE_ERR,
 };
 
 // Initialize
@@ -93,7 +94,11 @@ pub fn set_file(name: String) {
 // Set the other depends file
 pub fn set_deps_file(paths: Vec<String>, add: bool) {
     let mut now = if add {
-        get_item_toml("./attest.toml", "deps_files").unwrap_or(Value::Array(Vec::new())).as_array().unwrap_or(&Vec::new()).to_owned()
+        get_item_toml("./attest.toml", "deps_files")
+            .unwrap_or(Value::Array(Vec::new()))
+            .as_array()
+            .unwrap_or(&Vec::new())
+            .to_owned()
     } else {
         Vec::new()
     };
@@ -102,9 +107,7 @@ pub fn set_deps_file(paths: Vec<String>, add: bool) {
 
     now.append(&mut list);
 
-    set_item_toml("./attest.toml", "deps_files", Value::Array(
-        now
-    ));
+    set_item_toml("./attest.toml", "deps_files", Value::Array(now));
 
     println!("{}", Marker::plus("\x1b[32mFinished successfully\x1b[m"));
 }
@@ -157,7 +160,7 @@ pub async fn login(user_name: String, password: String) {
 
         dir.push(".attest_global");
 
-        if dir.is_dir() {
+        if !dir.is_dir() {
             create_dir_all(&dir).expect(CREATE_ERR);
         }
 

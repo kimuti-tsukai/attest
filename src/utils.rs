@@ -6,13 +6,13 @@ use std::{
     sync::Arc,
 };
 
+use crate::test::Res;
 use anyhow::Result;
 use reqwest::cookie::Jar;
 use reqwest::{Client, Response, Url};
 use scraper::html::Select;
 use scraper::{ElementRef, Html, Selector};
 use toml::{map::Map, Table, Value};
-use crate::test::Res;
 
 pub const OPEN_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong opening a file";
 pub const READ_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong reading a file";

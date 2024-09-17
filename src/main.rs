@@ -24,7 +24,7 @@ enum Arg {
         #[clap(short = 'b', long = "build")]
         build: bool,
 
-        #[clap(short = 'n',long = "num",num_args = 0..,value_delimiter = ' ')]
+        #[clap(short = 'n', long = "num", num_args = 0.., value_delimiter = ' ')]
         example_num: Vec<usize>,
     },
     /// Submit your code
@@ -124,7 +124,7 @@ Input:
         add: bool,
         #[clap(value_delimiter = ' ')]
         paths: Vec<String>,
-    }
+    },
 }
 
 #[tokio::main]
@@ -132,7 +132,11 @@ async fn main() -> Result<()> {
     let args: Arg = Arg::parse();
 
     match args {
-        Arg::Test { url, example_num, build } => {
+        Arg::Test {
+            url,
+            example_num,
+            build,
+        } => {
             test(url, example_num, build).await?;
         }
         Arg::Submit { url, lang } => {
