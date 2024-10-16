@@ -113,10 +113,11 @@ pub fn file_read_to_string<T: AsRef<Path> + Clone>(path: T) -> String {
             File::create(&path).unwrap_or_else(|_| panic!("{}", create_err(&path)));
             String::new()
         }
-        _ => panic!(
-            "{} {} couldn't be opened",
+        e => panic!(
+            "{} {} couldn't be opened. Error: {}",
             Marker::Minus,
-            path.as_ref().as_os_str().to_str().unwrap_or("")
+            path.as_ref().display(),
+            e
         ),
     })
 }
