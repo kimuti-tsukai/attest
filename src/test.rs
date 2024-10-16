@@ -13,8 +13,8 @@ use std::{
 };
 
 use crate::utils::{
-    file_read_to_string, items_toml, link_from_copy, make_client, request, to_html, Marker,
-    CREATE_ERR, WRITE_ERR,
+    create_err, file_read_to_string, items_toml, link_from_copy, make_client, request, to_html,
+    write_err, Marker,
 };
 
 use anyhow::{bail, Context, Result};
@@ -95,14 +95,19 @@ fn time_limit_from_cache() -> u128 {
 
 // Save cache if the link is different
 fn save_cache(url: &str, time_limit: u128, examples: &Vec<IO>) {
-    let mut l: File = File::create("./.attest/url.txt").expect(CREATE_ERR);
-    write!(&mut l, "{}", url).expect(WRITE_ERR);
+    let mut l: File = File::create("./.attest/url.txt")
+        .unwrap_or_else(|_| panic!("{}", create_err("./.attest/url.txt")));
+    write!(&mut l, "{}", url).unwrap_or_else(|_| panic!("{}", write_err("./.attest/url.txt")));
 
-    let mut t: File = File::create("./.attest/time_limit.txt").expect(CREATE_ERR);
-    write!(&mut t, "{}", time_limit).expect(WRITE_ERR);
+    let mut t: File = File::create("./.attest/time_limit.txt")
+        .unwrap_or_else(|_| panic!("{}", create_err("./.attest/time_limit.txt")));
+    write!(&mut t, "{}", time_limit)
+        .unwrap_or_else(|_| panic!("{}", write_err("./.attest/time_limit.txt")));
 
-    let mut e: File = File::create("./.attest/examples.json").expect(CREATE_ERR);
-    write!(&mut e, "{}", serde_json::to_string(examples).unwrap()).expect(WRITE_ERR);
+    let mut e: File = File::create("./.attest/examples.json")
+        .unwrap_or_else(|_| panic!("{}", create_err("./.attest/examples.json")));
+    write!(&mut e, "{}", serde_json::to_string(examples).unwrap())
+        .unwrap_or_else(|_| panic!("{}", write_err("./.attest/examples.json")));
 }
 
 // Select examples from Html
@@ -202,8 +207,10 @@ fn is_same_code(setting_toml: &Map<String, Value>) -> Option<bool> {
     if Some(now_hash) == before_hash {
         Some(true)
     } else {
-        let mut f: File = File::create("./.attest/before.txt").expect(CREATE_ERR);
-        write!(&mut f, "{}", now_hash).expect(WRITE_ERR);
+        let mut f: File = File::create("./.attest/before.txt")
+            .unwrap_or_else(|_| panic!("{}", create_err("./.attest/before.txt")));
+        write!(&mut f, "{}", now_hash)
+            .unwrap_or_else(|_| panic!("{}", write_err("./.attest/before.txt")));
         Some(false)
     }
 }
@@ -254,9 +261,12 @@ fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
     is_same = is_same && caches.is_empty();
 
     if !is_same {
-        let mut f: File = File::create("./.attest/deps_caches.json").expect(CREATE_ERR);
+        let mut f: File = File::create("./.attest/deps_caches.json")
+            .unwrap_or_else(|_| panic!("{}", create_err("./.attest/deps_caches.json")));
+
         let s: String = serde_json::to_string(&new_cache).unwrap();
-        write!(f, "{}", s).expect(WRITE_ERR);
+        write!(f, "{}", s)
+            .unwrap_or_else(|_| panic!("{}", write_err("./.attest/deps_caches.json")));
     }
 
     is_same
@@ -268,8 +278,10 @@ fn is_same_setting(setting_toml: &Map<String, Value>) -> Result<bool> {
     if setting_toml == &before_settiing {
         Ok(true)
     } else {
-        let mut f: File = File::create("./.attest/cache.toml").expect(CREATE_ERR);
-        writeln!(&mut f, "{}", setting_toml).expect(WRITE_ERR);
+        let mut f: File = File::create("./.attest/cache.toml")
+            .unwrap_or_else(|_| panic!("{}", create_err("./.attest/cache.toml")));
+        writeln!(&mut f, "{}", setting_toml)
+            .unwrap_or_else(|_| panic!("{}", write_err("./.attest/cache.toml")));
 
         Ok(false)
     }

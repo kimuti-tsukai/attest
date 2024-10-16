@@ -12,38 +12,40 @@ use scraper::{ElementRef, Html, Selector};
 use toml::Value;
 
 use crate::utils::{
-    get_item_toml, lang_select, make_client, request, set_item_toml, to_html, Marker, CREATE_ERR,
-    OPEN_ERR, READ_ERR, WRITE_ERR,
+    create_err, file_read_to_string, get_item_toml, lang_select, make_client, request,
+    set_item_toml, to_html, write_err, Marker,
 };
 
 // Initialize
 pub fn init() {
-    File::create("./attest.toml").expect(CREATE_ERR);
+    File::create("./attest.toml").unwrap_or_else(|_| panic!("{}", create_err("./attest.toml")));
 
-    create_dir_all("./.attest").expect(CREATE_ERR);
+    create_dir_all("./.attest").unwrap_or_else(|_| panic!("{}", create_err("./.attest")));
 
-    File::create("./.attest/before.txt").expect(CREATE_ERR);
+    File::create("./.attest/before.txt")
+        .unwrap_or_else(|_| panic!("{}", create_err("./.attest/before.txt")));
 
-    File::create("./.attest/cache.toml").expect(CREATE_ERR);
+    File::create("./.attest/cache.toml")
+        .unwrap_or_else(|_| panic!("{}", create_err("./.attest/cache.toml")));
 
-    File::create("./.attest/url.txt").expect(CREATE_ERR);
+    File::create("./.attest/url.txt")
+        .unwrap_or_else(|_| panic!("{}", create_err("./.attest/url.txt")));
 
-    File::create("./.attest/examples.json").expect(CREATE_ERR);
+    File::create("./.attest/examples.json")
+        .unwrap_or_else(|_| panic!("{}", create_err("./.attest/examples.json")));
 
-    File::create("./.attest/deps_caches.json").expect(CREATE_ERR);
+    File::create("./.attest/deps_caches.json")
+        .unwrap_or_else(|_| panic!("{}", create_err("./.attest/deps_caches.json")));
 
-    File::create("./.attest/time_limit.txt").expect(CREATE_ERR);
+    File::create("./.attest/time_limit.txt")
+        .unwrap_or_else(|_| panic!("{}", create_err("./.attest/time_limit.txt")));
 
     println!("{}", Marker::plus("\x1b[32mFinished successfully\x1b[m"));
 }
 
 // Show settings
 pub fn show_set() {
-    let mut r: String = String::new();
-    File::open("./attest.toml")
-        .expect(OPEN_ERR)
-        .read_to_string(&mut r)
-        .expect(READ_ERR);
+    let r = file_read_to_string("./attest.toml");
 
     println!("{}", &r.trim_end());
 }
@@ -161,14 +163,15 @@ pub async fn login(user_name: String, password: String) {
         dir.push(".attest_global");
 
         if !dir.is_dir() {
-            create_dir_all(&dir).expect(CREATE_ERR);
+            create_dir_all(&dir).unwrap_or_else(|_| panic!("{}", create_err(&dir)));
         }
 
         dir.push("cookies.txt");
 
-        let mut file: File = File::create(&dir).expect(CREATE_ERR);
+        let mut file: File = File::create(&dir).unwrap_or_else(|_| panic!("{}", create_err(&dir)));
 
-        writeln!(&mut file, "REVEL_SESSION = {}", cookie_value).expect(WRITE_ERR);
+        writeln!(&mut file, "REVEL_SESSION = {}", cookie_value)
+            .unwrap_or_else(|_| panic!("{}", write_err(dir)));
 
         println!("{}", Marker::plus("\x1b[32mFinished successfully\x1b[m"));
     } else {
@@ -181,7 +184,7 @@ pub fn logout() {
 
     dir.push(".attest_global/cookies.txt");
 
-    File::create(dir).expect(CREATE_ERR);
+    File::create(&dir).unwrap_or_else(|_| panic!("{}", create_err(dir)));
 }
 
 pub async fn lang(

@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::io::prelude::*;
+use std::io::{prelude::*, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::{
     fs::{read_to_string, File},
@@ -14,10 +14,19 @@ use scraper::html::Select;
 use scraper::{ElementRef, Html, Selector};
 use toml::{map::Map, Table, Value};
 
-pub const OPEN_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong opening a file";
-pub const READ_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong reading a file";
-pub const CREATE_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong creating a file or directory";
-pub const WRITE_ERR: &str = "\x1b[31m[-]\x1b[m something went wrong writing to a file";
+pub fn create_err<P: AsRef<Path>>(path: P) -> String {
+    format!(
+        "\x1b[31m[-]\x1b[m something went wrong creating {}",
+        path.as_ref().display()
+    )
+}
+
+pub fn write_err<P: AsRef<Path>>(path: P) -> String {
+    format!(
+        "\x1b[31m[-]\x1b[m something went wrong writing to {}",
+        path.as_ref().display()
+    )
+}
 
 // Request the link
 pub async fn request(client: &Client, url: &str) -> Result<String> {
@@ -58,7 +67,7 @@ pub fn get_cookies() -> String {
 pub fn set_item_toml<T: AsRef<Path>>(path: T, key: &str, value: Value) {
     let setting: String = file_read_to_string(&path);
 
-    let mut f: File = File::create(&path).expect(CREATE_ERR);
+    let mut f: File = File::create(&path).unwrap_or_else(|_| panic!("{}", create_err(&path)));
 
     let mut setting_toml: Map<String, Value> = setting
         .parse::<Table>()
@@ -66,7 +75,7 @@ pub fn set_item_toml<T: AsRef<Path>>(path: T, key: &str, value: Value) {
 
     setting_toml.insert(String::from(key), value);
 
-    write!(&mut f, "{}", setting_toml).expect(WRITE_ERR);
+    write!(&mut f, "{}", setting_toml).unwrap_or_else(|_| panic!("{}", write_err(&path)));
 }
 
 pub fn lang_select(html: &Html) -> Vec<(String, String)> {
@@ -99,12 +108,16 @@ pub fn get_item_toml<T: AsRef<Path> + Debug>(path: T, key: &str) -> Option<Value
 }
 
 pub fn file_read_to_string<T: AsRef<Path> + Clone>(path: T) -> String {
-    read_to_string(path.clone()).unwrap_or_else(|_| {
-        panic!(
-            "{} {} file does not exist",
+    read_to_string(&path).unwrap_or_else(|e| match e.kind() {
+        ErrorKind::NotFound => {
+            File::create(&path).unwrap_or_else(|_| panic!("{}", create_err(&path)));
+            String::new()
+        }
+        _ => panic!(
+            "{} {} couldn't be opened",
             Marker::Minus,
             path.as_ref().as_os_str().to_str().unwrap_or("")
-        )
+        ),
     })
 }
 
