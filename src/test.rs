@@ -9,6 +9,7 @@ use std::{
     num::IntErrorKind,
     path::{Path, PathBuf},
     process::{Command as StdCommand, Output, Stdio},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -17,7 +18,7 @@ use crate::utils::{
     write_err, Marker,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 
 use reqwest::Client;
 
@@ -47,7 +48,7 @@ pub async fn test(
 ) -> Result<Option<Vec<Option<Res>>>> {
     let (examples, time_limit): (Vec<IO>, u128);
 
-    if url.is_none() || is_same_link(&url.clone().unwrap()) {
+    if url.is_none() || is_same_link(url.as_ref().unwrap()) {
         examples = examples_from_cache();
 
         time_limit = time_limit_from_cache();
@@ -402,29 +403,31 @@ async fn tester(
     example_num: Vec<usize>,
     p_build: bool,
 ) -> Option<Vec<Option<Res>>> {
-    let dir: PathBuf = current_dir().unwrap();
+    let dir: Arc<PathBuf> = Arc::new(current_dir().unwrap());
 
     let mut results: Vec<Option<Res>> = Vec::new();
 
-    if let Err(e) = build_wrap(setting_toml, &dir, &mut results, p_build) {
+    if let Err(e) = build_wrap(setting_toml, &*dir, &mut results, p_build) {
         println!("{}", e);
         return None;
     }
 
     let commands: Vec<String> = get_commands(setting_toml);
 
-    let execute_command: String = commands
-        .first()
-        .unwrap_or_else(|| panic!("{}", Marker::minus(r#""command" value is not satisfied"#)))
-        .to_owned();
+    let execute_command: Arc<String> = Arc::new(
+        commands
+            .first()
+            .unwrap_or_else(|| panic!("{}", Marker::minus(r#""command" value is not satisfied"#)))
+            .to_owned(),
+    );
 
-    let args: Vec<String> = if commands.len() > 1 {
+    let args: Arc<Vec<String>> = Arc::new(if commands.len() > 1 {
         commands[1..].to_vec()
     } else {
         Vec::new()
-    };
+    });
 
-    let test_commands: Option<Vec<String>> = get_test_command(setting_toml);
+    let test_commands: Arc<Option<Vec<String>>> = Arc::new(get_test_command(setting_toml));
 
     let mut handles = Vec::new();
 
@@ -435,18 +438,18 @@ async fn tester(
         }
 
         let io: IO = io.clone();
-        let args: Vec<String> = args.clone();
+        let args: Arc<Vec<String>> = Arc::clone(&args);
 
-        let test_commands: Option<Vec<String>> = test_commands.clone();
-        let dir: PathBuf = dir.clone();
-        let execute_command: String = execute_command.clone();
+        let test_commands: Arc<Option<Vec<String>>> = Arc::clone(&test_commands);
+        let dir: Arc<PathBuf> = Arc::clone(&dir);
+        let execute_command: Arc<String> = Arc::clone(&execute_command);
 
         let f = async move {
             let mut buf: String = String::new();
 
             writeln!(buf, "{} \x1b[35mexample{}\x1b[m", Marker::X, index + 1)?;
 
-            let output = spawn_command(&io.input, &dir, &execute_command, &args[..]).await?;
+            let output = spawn_command(&io.input, &*dir, &execute_command, &args[..]).await?;
 
             let start: Instant = Instant::now();
 
@@ -470,7 +473,7 @@ async fn tester(
             let time: u128 = start.elapsed().as_millis();
 
             Ok((
-                check(output, time, &io, &test_commands, &dir, &mut buf).await?,
+                check(output, time, &io, &test_commands, &*dir, &mut buf).await?,
                 buf,
             ))
         };
@@ -562,16 +565,17 @@ async fn custom_judge<T: AsRef<Path>>(
         return Ok((false, None));
     };
 
-    let mut args = command[1..].to_vec();
+    let [first, args @ ..] = &command[..] else {
+        bail!("The run command is not set");
+    };
+    let mut args = args.to_vec();
     args.push(result.to_string());
     args.push(io.output.clone());
 
     let test_output: Output = spawn_command(
         &format!("{}\n{}", result, &io.output),
         dir,
-        command
-            .first()
-            .with_context(|| "The running command is not set")?,
+        first,
         &args[..],
     )
     .await?

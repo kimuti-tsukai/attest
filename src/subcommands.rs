@@ -53,8 +53,8 @@ pub fn show_set() {
 // Set the build command
 pub fn set_build(commands: Vec<String>) {
     let values: Vec<Value> = commands
-        .iter()
-        .map(|v: &String| Value::String(v.clone()))
+        .into_iter()
+        .map(|v: String| Value::String(v))
         .collect();
 
     set_item_toml("./attest.toml", "build", Value::Array(values));
@@ -65,8 +65,8 @@ pub fn set_build(commands: Vec<String>) {
 // Set the run command
 pub fn set_run(commands: Vec<String>) {
     let values: Vec<Value> = commands
-        .iter()
-        .map(|v: &String| Value::String(v.clone()))
+        .into_iter()
+        .map(|v: String| Value::String(v))
         .collect();
 
     set_item_toml("./attest.toml", "run", Value::Array(values));
@@ -77,8 +77,8 @@ pub fn set_run(commands: Vec<String>) {
 // Set the test command
 pub fn set_test(commands: Vec<String>) {
     let values: Vec<Value> = commands
-        .iter()
-        .map(|v: &String| Value::String(v.clone()))
+        .into_iter()
+        .map(|v: String| Value::String(v))
         .collect();
 
     set_item_toml("./attest.toml", "test", Value::Array(values));
