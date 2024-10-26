@@ -123,9 +123,15 @@ pub async fn login(user_name: String, password: String) {
         .cookie_store(true)
         .cookie_provider(cookies)
         .build()
-        .unwrap();
+        .unwrap_or_else(|e| {
+            panic!(
+                "{} something went wrong criating HTTPS Client. Error: {}",
+                Marker::Minus,
+                e
+            )
+        });
 
-    let page: Response = client.get(url).send().await.unwrap();
+    let page: Response = client.get(url).send().await.unwrap_or_else(|_| panic!("{}", Marker::minus("Url couldn't be parsed")));
 
     let text: String = page.text().await.unwrap();
 
