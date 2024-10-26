@@ -4,7 +4,6 @@ use std::{
     fmt::Write as _,
     fs::{self, File},
     future::Future,
-    hash::{Hash, Hasher},
     io::Write,
     num::IntErrorKind,
     path::{Path, PathBuf},
@@ -14,15 +13,13 @@ use std::{
 };
 
 use crate::utils::{
-    create_err, file_read_to_string, items_toml, link_from_copy, make_client, request, to_html,
-    write_err, Marker,
+    create_err, file_read_to_string, hash_from, items_toml, link_from_copy, make_client, request,
+    to_html, write_err, Marker,
 };
 
 use anyhow::{bail, Result};
 
 use reqwest::Client;
-
-use rustc_hash::FxHasher;
 
 use tokio::{
     io::AsyncWriteExt,
@@ -61,7 +58,7 @@ pub async fn test(
 
         let html: Html = to_html(text);
 
-        examples = assort(&select_samples(&html));
+        examples = packing_to_io(&select_samples(&html));
 
         time_limit = get_time_limit(&html);
 
@@ -140,7 +137,7 @@ impl IO {
 }
 
 // Packing inputs and outputs to `IO`
-fn assort(v: &[String]) -> Vec<IO> {
+fn packing_to_io(v: &[String]) -> Vec<IO> {
     v.chunks(2)
         .map(|l: &[String]| IO::new(l[0].clone(), l[1].clone()))
         .collect()
@@ -163,37 +160,43 @@ fn get_time_limit(html: &Html) -> u128 {
 
     if let Some(s) = re1.captures(t) {
         (s.get(1).unwrap().as_str().parse::<f64>().unwrap() * 1000.) as u128
-    } else {
-        re2.captures(t)
-            .unwrap()
-            .get(1)
+    } else if let Some(s) = re2.captures(t) {
+        s.get(1)
             .unwrap_or_else(|| panic!("{} Please input the question page.", Marker::Minus))
             .as_str()
             .parse::<u128>()
             .unwrap()
+    } else {
+        eprintln!("{}", Marker::minus("Failed to get time limit"));
+        u128::MAX
     }
 }
 
 // Check if the code is same
 fn is_same_code(setting_toml: &Map<String, Value>) -> Option<bool> {
-    let file_path: &str = setting_toml.get("file_path")?.as_str().unwrap_or_else(|| {
-        panic!(
-            "{}",
-            Marker::minus(r#"the "file_path" value must be string"#)
-        )
-    });
+    let file_path: &str = setting_toml
+        .get("file_path")
+        .unwrap_or_else(|| {
+            panic!(
+                "{}",
+                Marker::minus(r#"the "file_path" value does not exist"#)
+            )
+        })
+        .as_str()
+        .unwrap_or_else(|| {
+            panic!(
+                "{}",
+                Marker::minus(r#"the "file_path" value has to be string"#)
+            )
+        });
 
     if !Path::new(file_path).is_file() {
         return None;
     }
 
-    let now: String = file_read_to_string(file_path);
+    let now_code: String = file_read_to_string(file_path);
 
-    let mut now_hasher: FxHasher = FxHasher::default();
-
-    now.hash(&mut now_hasher);
-
-    let now_hash: u64 = now_hasher.finish();
+    let now_hash: u64 = hash_from(&now_code);
 
     let before: String = file_read_to_string("./.attest/before.txt");
 
@@ -216,7 +219,7 @@ fn is_same_code(setting_toml: &Map<String, Value>) -> Option<bool> {
     }
 }
 
-fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
+fn is_same_deps_files(setting_toml: &Map<String, Value>) -> bool {
     let Some(file_paths) = setting_toml.get("deps_files") else {
         return true;
     };
@@ -237,15 +240,13 @@ fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
 
     let file_hashes = files.map(|p: &str| {
         let f: String = file_read_to_string(p);
-        let mut hasher: FxHasher = FxHasher::default();
-        f.hash(&mut hasher);
-        (p, hasher.finish())
+        (p, hash_from(&f))
     });
 
-    let caches_t: String =
+    let caches_text: String =
         fs::read_to_string("./.attest/deps_caches.json").unwrap_or("{}".to_string());
 
-    let mut caches: HashMap<&str, u64> = serde_json::from_str(&caches_t).unwrap_or_default();
+    let mut caches: HashMap<&str, u64> = serde_json::from_str(&caches_text).unwrap_or_default();
 
     let mut new_cache: HashMap<&str, u64> = HashMap::new();
 
@@ -273,18 +274,18 @@ fn is_sama_other_files(setting_toml: &Map<String, Value>) -> bool {
     is_same
 }
 
-fn is_same_setting(setting_toml: &Map<String, Value>) -> Result<bool> {
-    let before_settiing: Map<String, Value> = items_toml("./.attest/cache.toml");
+fn is_same_setting(setting_toml: &Map<String, Value>) -> bool {
+    let before_settiing: Map<String, Value> = items_toml("./.attest/before_setting.toml");
 
     if setting_toml == &before_settiing {
-        Ok(true)
+        true
     } else {
-        let mut f: File = File::create("./.attest/cache.toml")
-            .unwrap_or_else(|_| panic!("{}", create_err("./.attest/cache.toml")));
+        let mut f: File = File::create("./.attest/before_setting.toml")
+            .unwrap_or_else(|_| panic!("{}", create_err("./.attest/before_setting.toml")));
         writeln!(&mut f, "{}", setting_toml)
-            .unwrap_or_else(|_| panic!("{}", write_err("./.attest/cache.toml")));
+            .unwrap_or_else(|_| panic!("{}", write_err("./.attest/before_setting.toml")));
 
-        Ok(false)
+        false
     }
 }
 
@@ -296,32 +297,28 @@ fn build<T: AsRef<Path>>(
     if let Some(c) = setting_toml.get("build") {
         if !p_build
             && is_same_code(setting_toml).unwrap_or(true)
-            && is_same_setting(setting_toml).unwrap_or(true)
-            && is_sama_other_files(setting_toml)
+            && is_same_setting(setting_toml)
+            && is_same_deps_files(setting_toml)
         {
             return None;
         }
 
         let build_commands: Vec<&str> = c
             .as_array()
-            .unwrap_or_else(|| panic!("{}", Marker::minus(r#""build" value must be array"#)))
+            .unwrap_or_else(|| panic!("{}", Marker::minus(r#""build" value has to be array"#)))
             .iter()
             .map(|v: &Value| {
                 v.as_str().unwrap_or_else(|| {
                     panic!(
                         "{}",
-                        Marker::minus(r#"items of "build" value must be string"#)
+                        Marker::minus(r#"items of "build" value has to be string"#)
                     )
                 })
             })
             .collect();
 
-        let command: &str = build_commands.first()?.to_owned();
-
-        let args: &[&str] = if build_commands.len() > 1 {
-            &build_commands[1..]
-        } else {
-            &[]
+        let [command, args @ ..] = build_commands.as_slice() else {
+            return None;
         };
 
         Some(
@@ -371,11 +368,11 @@ fn get_string_list(key: &str, toml: &Map<String, Value>) -> Option<Vec<String>> 
     Some(
         toml.get(key)?
             .as_array()
-            .unwrap_or_else(|| panic!(r#""{}" value must be array"#, key))
+            .unwrap_or_else(|| panic!(r#""{}" value has to be array"#, key))
             .iter()
             .map(|v: &Value| {
                 v.as_str()
-                    .unwrap_or_else(|| panic!(r#"items of "{}" value must be string"#, key))
+                    .unwrap_or_else(|| panic!(r#"items of "{}" value have to be string"#, key))
                     .to_string()
             })
             .collect(),
@@ -414,18 +411,16 @@ async fn tester(
 
     let commands: Vec<String> = get_commands(setting_toml);
 
-    let execute_command: Arc<String> = Arc::new(
-        commands
-            .first()
-            .unwrap_or_else(|| panic!("{}", Marker::minus(r#""command" value is not satisfied"#)))
-            .to_owned(),
-    );
+    let [excute_command, args @ ..] = commands.as_slice() else {
+        panic!(
+            "{}",
+            Marker::minus(r#"the length of "command" value has to be more than 0"#)
+        )
+    };
 
-    let args: Arc<Vec<String>> = Arc::new(if commands.len() > 1 {
-        commands[1..].to_vec()
-    } else {
-        Vec::new()
-    });
+    let execute_command: Arc<String> = Arc::new(excute_command.clone());
+
+    let args: Arc<Vec<String>> = Arc::new(args.to_vec());
 
     let test_commands: Arc<Option<Vec<String>>> = Arc::new(get_test_command(setting_toml));
 
@@ -449,7 +444,7 @@ async fn tester(
 
             writeln!(buf, "{} \x1b[35mexample{}\x1b[m", Marker::X, index + 1)?;
 
-            let output = spawn_command(&io.input, &*dir, &execute_command, &args[..]).await?;
+            let output = spawn_command(&io.input, &*dir, &execute_command, args.as_slice()).await?;
 
             let start: Instant = Instant::now();
 
@@ -462,7 +457,7 @@ async fn tester(
                         writeln!(buf, "{} \x1b[33mTLE\x1b[m\n", Marker::Minus)?;
 
                         writeln!(buf, "{} input:\n{}", Marker::X, io.input)?;
-                        writeln!(buf, "{} expect output:\n{}", Marker::X, io.output)?;
+                        writeln!(buf, "{} correct output:\n{}", Marker::X, io.output)?;
 
                         writeln!(buf, "{} time: {}", Marker::X, time)?;
 
@@ -608,7 +603,7 @@ async fn custom_judge<T: AsRef<Path>>(
             "true" => true,
             "false" => false,
             _ => bail!(
-                "{} Output format is wrong. The first line of output must be \"true\" or \"false\"",
+                "{} Output format is wrong. The first line of output has to b \"true\" or \"false\"",
                 Marker::Minus
             ),
         },
@@ -654,7 +649,7 @@ async fn check<T: AsRef<Path>>(
             writeln!(buf)?;
 
             writeln!(buf, "{} input:\n{}", Marker::X, io.input)?;
-            writeln!(buf, "{} excepted output:\n{}", Marker::X, io.output)?;
+            writeln!(buf, "{} correct output:\n{}", Marker::X, io.output)?;
             Res::WA
         }
     } else {

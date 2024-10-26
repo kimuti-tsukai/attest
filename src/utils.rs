@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use std::io::{prelude::*, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::{
@@ -10,6 +11,7 @@ use crate::test::Res;
 use anyhow::Result;
 use reqwest::cookie::Jar;
 use reqwest::{Client, Response, Url};
+use rustc_hash::FxHasher;
 use scraper::html::Select;
 use scraper::{ElementRef, Html, Selector};
 use toml::{map::Map, Table, Value};
@@ -177,4 +179,12 @@ impl From<&Res> for Marker {
             _ => Marker::Minus,
         }
     }
+}
+
+pub fn hash_from<T: Hash>(src: &T) -> u64 {
+    let mut hasher: FxHasher = FxHasher::default();
+
+    src.hash(&mut hasher);
+
+    hasher.finish()
 }

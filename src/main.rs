@@ -92,7 +92,7 @@ enum Sets {
         command: Vec<String>,
     },
     #[command(about = r#"Set the test command
-Test command must be satisfied with below:
+Test command has to be satisfied with below:
 
 You had better use command line arguments.
 

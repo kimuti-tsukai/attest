@@ -25,8 +25,8 @@ pub fn init() {
     File::create("./.attest/before.txt")
         .unwrap_or_else(|_| panic!("{}", create_err("./.attest/before.txt")));
 
-    File::create("./.attest/cache.toml")
-        .unwrap_or_else(|_| panic!("{}", create_err("./.attest/cache.toml")));
+    File::create("./.attest/before_setting.toml")
+        .unwrap_or_else(|_| panic!("{}", create_err("./.attest/before_setting.toml")));
 
     File::create("./.attest/url.txt")
         .unwrap_or_else(|_| panic!("{}", create_err("./.attest/url.txt")));

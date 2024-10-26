@@ -68,7 +68,7 @@ pub async fn submit(url: Option<String>, lang: Option<String>) {
                 .unwrap_or_else(|| panic!("{}", Marker::minus("The lang cannot be used")))
                 .1;
 
-            lang_code.to_owned()
+            lang_code.to_string()
         }
     };
 
